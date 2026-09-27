@@ -55,31 +55,31 @@ body {
 button, input, select { font: inherit; }
 button:disabled { opacity: .48; cursor: not-allowed !important; }
 
-.app { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 22px 0 56px; }
+.app { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 10px 0 34px; }
 
 .topbar {
   display: flex;
   justify-content: flex-end;
   width: max-content;
   max-width: 100%;
-  margin-left: auto;
   padding: 6px;
   border: 1px solid var(--line);
   border-radius: 15px;
   background: color-mix(in srgb,var(--panel) 92%,transparent);
   backdrop-filter: blur(18px);
   box-shadow: var(--soft-shadow);
-  position: sticky;
+  position: fixed;
   top: 12px;
+  right: max(16px, calc((100vw - 1180px) / 2));
   z-index: 20;
 }
 .top-actions { display: flex; align-items: center; gap: 6px; }
 
 .forecast-wrap {
   width: min(860px,100%);
-  margin: 0 auto 26px;
+  margin: 0 auto 16px;
   display: grid;
-  grid-template-columns: 138px minmax(0,1fr) auto;
+  grid-template-columns: 138px minmax(0,1fr);
   align-items: stretch;
   gap: 10px;
   padding: 10px;
@@ -123,11 +123,6 @@ button:disabled { opacity: .48; cursor: not-allowed !important; }
 .forecast-temp { font-size: 12px; font-weight: 700; margin-top: 4px; white-space: nowrap; }
 .forecast-meta { font-size: 10px; color: var(--muted); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .forecast-empty { grid-column: 1/-1; padding: 15px 12px; color: var(--muted); font-size: 12px; text-align: center; }
-.weather-edit-btn {
-  align-self: stretch; border: 1px solid var(--line); border-radius: 14px; background: var(--panel-solid);
-  color: var(--muted); padding: 0 12px; cursor: pointer; transition: .2s ease; white-space: nowrap;
-}
-.weather-edit-btn:hover { color: var(--brand); border-color: rgba(79,124,255,.3); transform: translateY(-1px); }
 .location-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
 .icon-btn, .user-btn, .sync-chip {
@@ -143,9 +138,9 @@ button:disabled { opacity: .48; cursor: not-allowed !important; }
 .sync-chip.error .sync-dot { background: var(--danger); }
 @keyframes pulse { 50% { opacity: .4; } }
 
-.hero { text-align: center; padding: 54px 0 42px; }
-.clock { font-size: clamp(48px,8vw,86px); line-height: 1; font-weight: 760; letter-spacing: -3px; margin-bottom: 12px; }
-.date { color: var(--muted); font-size: 15px; margin-bottom: 28px; }
+.hero { text-align: center; padding: 14px 0 24px; }
+.clock { font-size: clamp(48px,8vw,82px); line-height: 1; font-weight: 760; letter-spacing: -3px; margin-bottom: 8px; }
+.date { color: var(--muted); font-size: 15px; margin-bottom: 16px; }
 .search-shell {
   width: min(760px,100%); margin: 0 auto; display: flex; align-items: center; padding: 7px; gap: 8px;
   border-radius: 18px; background: var(--panel-solid); border: 1px solid var(--line); box-shadow: var(--shadow);
@@ -154,7 +149,7 @@ button:disabled { opacity: .48; cursor: not-allowed !important; }
 .search-input { flex: 1; min-width: 0; border: 0; outline: 0; color: var(--text); background: transparent; font-size: 17px; padding: 13px 6px; }
 .search-input::placeholder { color: color-mix(in srgb,var(--muted) 75%,transparent); }
 .search-btn { border: 0; color: #fff; background: linear-gradient(135deg,var(--brand),var(--brand-2)); border-radius: 13px; padding: 13px 22px; cursor: pointer; font-weight: 700; min-width: 88px; box-shadow: 0 8px 18px rgba(79,124,255,.24); }
-.shortcut { margin-top: 13px; color: var(--muted); font-size: 12px; }
+.shortcut { margin-top: 8px; color: var(--muted); font-size: 12px; }
 
 .nav-panel { background: var(--panel); backdrop-filter: blur(16px); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; min-height: 0; }
 .tabs-wrap { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px 10px; border-bottom: 1px solid var(--line); overflow-x: auto; }
@@ -185,7 +180,7 @@ button:disabled { opacity: .48; cursor: not-allowed !important; }
 .card-action.favorite.active { color: #ffb020; }
 .card-action.delete:hover { color: var(--danger); }
 .empty { padding: 28px 20px; text-align: center; color: var(--muted); grid-column: 1/-1; }
-.footer { text-align: center; color: var(--muted); font-size: 12px; padding: 22px 0 0; }
+.footer { text-align: center; color: var(--muted); font-size: 12px; padding: 12px 0 0; }
 
 .toast { position: fixed; left: 50%; bottom: 28px; transform: translate(-50%,18px); padding: 10px 14px; border-radius: 12px; background: #20283a; color: #fff; font-size: 13px; box-shadow: 0 12px 40px rgba(0,0,0,.24); opacity: 0; pointer-events: none; transition: .2s ease; z-index: 100; max-width: min(520px,calc(100% - 30px)); text-align: center; }
 .toast.show { opacity: 1; transform: translate(-50%,0); }
@@ -221,11 +216,11 @@ dialog::backdrop { background: rgba(12,18,30,.38); backdrop-filter: blur(4px); }
 @media (hover: none) { .card-actions { opacity: 1; } }
 @media (max-width: 920px) { .grid { grid-template-columns: repeat(3,minmax(0,1fr)); } .sync-chip { display: none; } }
 @media (max-width: 680px) {
-  .app { width: min(100% - 20px,1180px); padding-top: 10px; }
-  .topbar { top: 8px; }
+  .app { width: min(100% - 20px,1180px); padding-top: 6px; }
+  .topbar { top: 8px; right: 10px; }
   .forecast-wrap {
     width: 100%;
-    grid-template-columns: minmax(0,1fr) auto;
+    grid-template-columns: 1fr;
     padding: 8px;
     overflow: hidden;
   }
@@ -247,7 +242,6 @@ dialog::backdrop { background: rgba(12,18,30,.38); backdrop-filter: blur(4px); }
     padding-bottom: 3px;
   }
   .forecast-card { flex: 0 0 112px; scroll-snap-align: start; }
-  .weather-edit-btn { padding-inline: 10px; min-height: 64px; }
   .hero { padding: 58px 0 30px; }
   .clock { letter-spacing: -2px; }
   .search-shell { border-radius: 16px; }
@@ -302,7 +296,6 @@ dialog::backdrop { background: rgba(12,18,30,.38); backdrop-filter: blur(4px); }
         <div class="forecast-strip" id="forecastStrip" aria-label="未来五天天气">
           <div class="forecast-empty">正在加载天气…</div>
         </div>
-        <button class="weather-edit-btn" id="weatherEditBtn" type="button" title="修改天气地区">地区⌄</button>
       </div>
 
       <form class="search-shell" id="searchForm">
@@ -555,7 +548,7 @@ window.NAV_CONFIG = {
     searchForm: $('searchForm'), searchInput: $('searchInput'), provider: $('provider'),
     themeBtn: $('themeBtn'), weatherBtn: $('weatherBtn'), weatherTemp: $('weatherTemp'),
     weatherCity: $('weatherCity'), weatherIcon: $('weatherIcon'), forecastStrip: $('forecastStrip'),
-    weatherEditBtn: $('weatherEditBtn'), weatherDialog: $('weatherDialog'),
+    weatherDialog: $('weatherDialog'),
     weatherProvinceSelect: $('weatherProvinceSelect'), weatherCitySelect: $('weatherCitySelect'),
     weatherCustomCity: $('weatherCustomCity'), weatherSaveBtn: $('weatherSaveBtn'),
     weatherCancelBtn: $('weatherCancelBtn'), addBtn: $('addBtn'),
@@ -1270,7 +1263,6 @@ window.NAV_CONFIG = {
   });
 
   els.weatherBtn.addEventListener('click', openWeatherDialog);
-  els.weatherEditBtn.addEventListener('click', openWeatherDialog);
   els.weatherCancelBtn.addEventListener('click', () => els.weatherDialog.close());
   els.weatherProvinceSelect.addEventListener('change', () => {
     fillWeatherCitySelect(els.weatherProvinceSelect.value);
