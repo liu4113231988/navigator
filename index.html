@@ -1,0 +1,1099 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
+  <title>起航 · 云端导航</title>
+  <meta name="description" content="基于 GitHub Pages + Supabase 的个人云端导航站" />
+  <style>
+:root {
+  --bg: #f5f7fb;
+  --panel: rgba(255,255,255,.88);
+  --panel-solid: #ffffff;
+  --text: #182033;
+  --muted: #74809a;
+  --line: rgba(20,30,55,.09);
+  --brand: #4f7cff;
+  --brand-2: #6d5cff;
+  --danger: #d94a56;
+  --success: #1f9d63;
+  --shadow: 0 18px 55px rgba(28,39,74,.10);
+  --soft-shadow: 0 8px 25px rgba(28,39,74,.07);
+  --radius: 22px;
+}
+
+html[data-theme="dark"] {
+  --bg: #0f1420;
+  --panel: rgba(24,31,47,.88);
+  --panel-solid: #181f2f;
+  --text: #eef3ff;
+  --muted: #98a4bd;
+  --line: rgba(255,255,255,.09);
+  --brand: #6e8dff;
+  --brand-2: #8a6cff;
+  --danger: #ff6b77;
+  --success: #4fd394;
+  --shadow: 0 18px 55px rgba(0,0,0,.32);
+  --soft-shadow: 0 8px 25px rgba(0,0,0,.24);
+}
+
+* { box-sizing: border-box; }
+html { min-height: 100%; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(circle at 10% 0%, rgba(79,124,255,.14), transparent 28%),
+    radial-gradient(circle at 90% 8%, rgba(125,92,255,.10), transparent 30%),
+    var(--bg);
+  transition: background .25s ease, color .25s ease;
+}
+
+button, input, select { font: inherit; }
+button:disabled { opacity: .48; cursor: not-allowed !important; }
+
+.app { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 22px 0 56px; }
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--panel);
+  backdrop-filter: blur(16px);
+  box-shadow: var(--soft-shadow);
+  position: sticky;
+  top: 12px;
+  z-index: 20;
+}
+
+.brand { display: flex; align-items: center; gap: 10px; min-width: max-content; }
+.brand-logo {
+  width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center;
+  color: #fff; font-weight: 800; background: linear-gradient(135deg,var(--brand),var(--brand-2));
+  box-shadow: 0 8px 18px rgba(79,124,255,.24);
+}
+.brand-name { font-weight: 760; letter-spacing: .2px; }
+.brand-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.top-actions { display: flex; align-items: center; gap: 8px; }
+
+.weather-chip, .icon-btn, .user-btn, .sync-chip {
+  border: 1px solid var(--line); background: var(--panel-solid); color: var(--text); border-radius: 12px; height: 38px;
+}
+.weather-chip { display: flex; align-items: center; gap: 8px; padding: 0 12px; cursor: pointer; }
+.weather-chip small { color: var(--muted); }
+.icon-btn { width: 38px; cursor: pointer; display: grid; place-items: center; transition: .2s ease; }
+.icon-btn:hover { transform: translateY(-1px); border-color: rgba(79,124,255,.35); }
+.user-btn { padding: 0 12px; cursor: pointer; max-width: 170px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.sync-chip { display: flex; align-items: center; gap: 7px; padding: 0 10px; font-size: 12px; color: var(--muted); }
+.sync-dot { width: 8px; height: 8px; border-radius: 50%; background: #9aa3b6; box-shadow: 0 0 0 3px rgba(154,163,182,.12); }
+.sync-chip.ok .sync-dot { background: var(--success); box-shadow: 0 0 0 3px color-mix(in srgb,var(--success) 16%,transparent); }
+.sync-chip.busy .sync-dot { background: #f0a32f; animation: pulse 1s ease infinite; }
+.sync-chip.error .sync-dot { background: var(--danger); }
+@keyframes pulse { 50% { opacity: .4; } }
+
+.hero { text-align: center; padding: 82px 0 46px; }
+.clock { font-size: clamp(48px,8vw,86px); line-height: 1; font-weight: 760; letter-spacing: -3px; margin-bottom: 12px; }
+.date { color: var(--muted); font-size: 15px; margin-bottom: 28px; }
+.search-shell {
+  width: min(760px,100%); margin: 0 auto; display: flex; align-items: center; padding: 7px; gap: 8px;
+  border-radius: 18px; background: var(--panel-solid); border: 1px solid var(--line); box-shadow: var(--shadow);
+}
+.search-provider { border: 0; background: transparent; color: var(--text); outline: none; padding-left: 8px; width: 92px; cursor: pointer; }
+.search-input { flex: 1; min-width: 0; border: 0; outline: 0; color: var(--text); background: transparent; font-size: 17px; padding: 13px 6px; }
+.search-input::placeholder { color: color-mix(in srgb,var(--muted) 75%,transparent); }
+.search-btn { border: 0; color: #fff; background: linear-gradient(135deg,var(--brand),var(--brand-2)); border-radius: 13px; padding: 13px 22px; cursor: pointer; font-weight: 700; min-width: 88px; box-shadow: 0 8px 18px rgba(79,124,255,.24); }
+.shortcut { margin-top: 13px; color: var(--muted); font-size: 12px; }
+
+.nav-panel { background: var(--panel); backdrop-filter: blur(16px); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+.tabs-wrap { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px 10px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.tabs { display: flex; gap: 6px; min-width: max-content; }
+.tab { border: 0; background: transparent; color: var(--muted); padding: 9px 14px; border-radius: 10px; cursor: pointer; transition: .2s ease; }
+.tab:hover { color: var(--text); background: rgba(79,124,255,.07); }
+.tab.active { color: var(--brand); background: rgba(79,124,255,.10); font-weight: 700; }
+.nav-actions { display: flex; gap: 8px; min-width: max-content; }
+.add-btn { border: 1px solid var(--line); background: var(--panel-solid); color: var(--text); border-radius: 10px; padding: 9px 13px; cursor: pointer; }
+.add-btn.primary-outline { border-color: color-mix(in srgb,var(--brand) 35%,var(--line)); color: var(--brand); }
+
+.grid { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 14px; padding: 20px; }
+.site-card {
+  position: relative; display: flex; flex-direction: column; align-items: flex-start; min-height: 132px; text-decoration: none; color: var(--text);
+  background: var(--panel-solid); border: 1px solid var(--line); border-radius: 18px; padding: 16px; box-shadow: 0 4px 16px rgba(33,45,77,.04);
+  transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease; overflow: hidden;
+}
+.site-card:hover { transform: translateY(-4px); box-shadow: var(--soft-shadow); border-color: rgba(79,124,255,.28); }
+.site-head { display: flex; align-items: center; gap: 11px; width: calc(100% - 58px); }
+.site-icon { width: 42px; height: 42px; flex: 0 0 auto; border-radius: 12px; display: grid; place-items: center; background: linear-gradient(135deg,rgba(79,124,255,.15),rgba(125,92,255,.13)); border: 1px solid rgba(79,124,255,.10); overflow: hidden; font-weight: 800; color: var(--brand); }
+.site-icon img { width: 26px; height: 26px; object-fit: contain; }
+.site-name { font-weight: 720; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.site-desc { margin-top: 14px; color: var(--muted); font-size: 12px; line-height: 1.55; max-width: 100%; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.card-actions { position: absolute; right: 8px; top: 8px; display: flex; gap: 1px; opacity: 0; transition: .2s ease; }
+.site-card:hover .card-actions, .site-card:focus-within .card-actions { opacity: 1; }
+.card-action { border: 0; background: color-mix(in srgb,var(--panel-solid) 88%,transparent); color: var(--muted); cursor: pointer; font-size: 15px; width: 27px; height: 27px; padding: 0; border-radius: 8px; }
+.card-action:hover { color: var(--text); background: var(--bg); }
+.card-action.favorite.active { color: #ffb020; }
+.card-action.delete:hover { color: var(--danger); }
+.empty { padding: 44px 20px; text-align: center; color: var(--muted); grid-column: 1/-1; }
+.footer { text-align: center; color: var(--muted); font-size: 12px; padding: 22px 0 0; }
+
+.toast { position: fixed; left: 50%; bottom: 28px; transform: translate(-50%,18px); padding: 10px 14px; border-radius: 12px; background: #20283a; color: #fff; font-size: 13px; box-shadow: 0 12px 40px rgba(0,0,0,.24); opacity: 0; pointer-events: none; transition: .2s ease; z-index: 100; max-width: min(520px,calc(100% - 30px)); text-align: center; }
+.toast.show { opacity: 1; transform: translate(-50%,0); }
+
+/* dialogs */
+dialog { width: min(540px,calc(100% - 24px)); border: 1px solid var(--line); border-radius: 20px; padding: 0; color: var(--text); background: var(--panel-solid); box-shadow: 0 30px 100px rgba(0,0,0,.25); }
+dialog::backdrop { background: rgba(12,18,30,.38); backdrop-filter: blur(4px); }
+.modal { padding: 22px; }
+.modal h3 { margin: 0 0 6px; }
+.modal p { margin: 0 0 18px; color: var(--muted); font-size: 13px; line-height: 1.55; }
+.field { display: grid; gap: 7px; margin: 12px 0; }
+.field label { font-size: 13px; color: var(--muted); }
+.field input, .field select, .category-create input { width: 100%; border: 1px solid var(--line); background: var(--bg); color: var(--text); border-radius: 11px; padding: 11px 12px; outline: none; }
+.field input:focus, .field select:focus, .category-create input:focus { border-color: color-mix(in srgb,var(--brand) 55%,var(--line)); box-shadow: 0 0 0 3px rgba(79,124,255,.10); }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+.modal-actions.split { justify-content: space-between; }
+.button-group, .account-actions { display: flex; gap: 10px; }
+.btn { border: 0; border-radius: 11px; padding: 10px 15px; cursor: pointer; }
+.btn.secondary { background: var(--bg); color: var(--text); border: 1px solid var(--line); }
+.btn.primary { background: linear-gradient(135deg,var(--brand),var(--brand-2)); color: #fff; font-weight: 700; }
+.btn.danger { background: color-mix(in srgb,var(--danger) 12%,var(--panel-solid)); color: var(--danger); border: 1px solid color-mix(in srgb,var(--danger) 25%,var(--line)); }
+.auth-error { min-height: 18px; font-size: 12px; color: var(--danger); margin-top: 6px; }
+
+.category-create { display: grid; grid-template-columns: 1fr auto; gap: 10px; margin: 12px 0 16px; }
+.category-list { display: grid; gap: 8px; max-height: 320px; overflow: auto; }
+.category-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; padding: 10px 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; }
+.category-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.category-row-actions { display: flex; gap: 6px; }
+.category-row-actions button { border: 0; background: var(--panel-solid); color: var(--muted); border-radius: 8px; cursor: pointer; padding: 6px 9px; }
+.category-row-actions button:hover { color: var(--text); }
+.category-row-actions .danger-link:hover { color: var(--danger); }
+
+@media (hover: none) { .card-actions { opacity: 1; } }
+@media (max-width: 920px) { .grid { grid-template-columns: repeat(3,minmax(0,1fr)); } .sync-chip { display: none; } }
+@media (max-width: 680px) {
+  .app { width: min(100% - 20px,1180px); padding-top: 10px; }
+  .topbar { top: 8px; }
+  .brand-sub, .weather-chip small { display: none; }
+  .hero { padding: 58px 0 30px; }
+  .clock { letter-spacing: -2px; }
+  .search-shell { border-radius: 16px; }
+  .search-provider { width: 76px; }
+  .search-btn { padding-inline: 16px; min-width: 68px; }
+  .tabs-wrap { align-items: flex-start; }
+  .nav-actions { position: sticky; right: 0; background: var(--panel); padding-left: 5px; }
+  .grid { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; padding: 14px; }
+  .site-card { min-height: 118px; padding: 14px; }
+  .user-btn { max-width: 88px; }
+}
+@media (max-width: 480px) {
+  .weather-chip { display: none; }
+  .grid { grid-template-columns: 1fr; }
+  .site-card { min-height: 104px; }
+  .site-desc { margin-top: 10px; }
+  .manage-categories-label { display: none; }
+  .modal-actions.split { flex-direction: column-reverse; }
+  .modal-actions.split > *, .button-group { width: 100%; }
+  .button-group .btn { flex: 1; }
+  .account-actions { flex-direction: column; }
+}
+
+</style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-logo">启</div>
+        <div>
+          <div class="brand-name">起航导航</div>
+          <div class="brand-sub">GitHub Pages · Supabase 云同步</div>
+        </div>
+      </div>
+
+      <div class="top-actions">
+        <div class="sync-chip" id="syncChip" title="云端同步状态">
+          <span class="sync-dot" id="syncDot"></span>
+          <span id="syncText">未连接</span>
+        </div>
+        <button class="weather-chip" id="weatherBtn" title="点击切换城市">
+          <span id="weatherIcon">☀️</span>
+          <strong id="weatherTemp">--°</strong>
+          <small id="weatherCity">上海</small>
+        </button>
+        <button class="icon-btn" id="themeBtn" title="切换深浅色">◐</button>
+        <button class="user-btn" id="userBtn" title="账户">登录</button>
+      </div>
+    </header>
+
+    <section class="hero">
+      <div class="clock" id="clock">--:--</div>
+      <div class="date" id="date"></div>
+
+      <form class="search-shell" id="searchForm">
+        <select class="search-provider" id="provider" aria-label="搜索引擎">
+          <option value="baidu">百度</option>
+          <option value="bing">Bing</option>
+          <option value="google">Google</option>
+        </select>
+        <input class="search-input" id="searchInput" placeholder="搜索你想找的内容…" autocomplete="off" />
+        <button class="search-btn" type="submit">搜索</button>
+      </form>
+      <div class="shortcut">快捷键：Ctrl / ⌘ + K 聚焦搜索</div>
+    </section>
+
+    <main class="nav-panel">
+      <div class="tabs-wrap">
+        <div class="tabs" id="tabs"></div>
+        <div class="nav-actions">
+          <button class="add-btn" id="manageCategoriesBtn" disabled>分类管理</button>
+          <button class="add-btn primary-outline" id="addBtn" disabled>＋ 添加站点</button>
+        </div>
+      </div>
+      <section class="grid" id="siteGrid">
+        <div class="empty">登录后加载你的云端导航。</div>
+      </section>
+    </main>
+
+    <div class="footer" id="footerText">站点数据保存在 Supabase；主题与天气城市保存在当前浏览器。</div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <dialog id="authDialog">
+    <form class="modal" id="authForm">
+      <h3>登录起航导航</h3>
+      <p>使用 Supabase Auth 登录后，导航数据会在不同设备间同步。</p>
+      <div class="field">
+        <label for="emailInput">邮箱</label>
+        <input id="emailInput" type="email" autocomplete="email" required placeholder="you@example.com" />
+      </div>
+      <div class="field">
+        <label for="passwordInput">密码</label>
+        <input id="passwordInput" type="password" autocomplete="current-password" minlength="6" required placeholder="至少 6 位" />
+      </div>
+      <div class="auth-error" id="authError"></div>
+      <div class="modal-actions split">
+        <button class="btn secondary" type="button" id="authCloseBtn">取消</button>
+        <div class="button-group">
+          <button class="btn secondary" type="button" id="signUpBtn">注册</button>
+          <button class="btn primary" type="submit">登录</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="accountDialog">
+    <div class="modal">
+      <h3>账户</h3>
+      <p id="accountEmail">—</p>
+      <div class="account-actions">
+        <button class="btn secondary" type="button" id="refreshBtn">立即同步</button>
+        <button class="btn danger" type="button" id="signOutBtn">退出登录</button>
+      </div>
+      <div class="modal-actions">
+        <button class="btn primary" type="button" id="accountCloseBtn">完成</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="siteDialog">
+    <form class="modal" id="siteForm">
+      <h3 id="siteDialogTitle">添加站点</h3>
+      <p>保存后将写入 Supabase，并自动同步到其他已登录设备。</p>
+      <input type="hidden" id="siteIdInput" />
+      <div class="field">
+        <label for="nameInput">名称</label>
+        <input id="nameInput" required maxlength="60" placeholder="例如：我的博客" />
+      </div>
+      <div class="field">
+        <label for="urlInput">网址</label>
+        <input id="urlInput" required type="url" maxlength="500" placeholder="https://example.com" />
+      </div>
+      <div class="field">
+        <label for="categoryInput">分类</label>
+        <select id="categoryInput" required></select>
+      </div>
+      <div class="field">
+        <label for="descInput">说明（可选）</label>
+        <input id="descInput" maxlength="120" placeholder="一句话说明用途" />
+      </div>
+      <div class="modal-actions">
+        <button class="btn secondary" type="button" id="siteCancelBtn">取消</button>
+        <button class="btn primary" type="submit" id="saveSiteBtn">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="categoryDialog">
+    <div class="modal">
+      <h3>分类管理</h3>
+      <p>可以新增、改名或删除分类。删除分类时，该分类下的站点也会一并删除。</p>
+      <form class="category-create" id="categoryCreateForm">
+        <input id="newCategoryInput" maxlength="40" required placeholder="新分类名称" />
+        <button class="btn primary" type="submit">添加</button>
+      </form>
+      <div class="category-list" id="categoryList"></div>
+      <div class="modal-actions">
+        <button class="btn primary" type="button" id="categoryCloseBtn">完成</button>
+      </div>
+    </div>
+  </dialog>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+// 起航导航：GitHub Pages + Supabase 客户端配置
+// Publishable key 可用于浏览器客户端；权限由 Supabase RLS 控制。
+// 切勿在前端或 GitHub 仓库中放入 Secret key / service_role key。
+window.NAV_CONFIG = {
+  siteUrl: "https://liu4113231988.github.io/navigator/",
+  supabaseUrl: "https://iqfgmwiifvopplaqkspq.supabase.co",
+  supabasePublishableKey: "sb_publishable_rpiR046kcbHffxiFO9WGhQ_8OfUXZhw",
+};
+
+</script>
+  <script>
+(() => {
+  'use strict';
+
+  const cfg = window.NAV_CONFIG || {};
+  const CONFIG_READY =
+    cfg.supabaseUrl &&
+    cfg.supabasePublishableKey &&
+    !String(cfg.supabaseUrl).startsWith('YOUR_') &&
+    !String(cfg.supabasePublishableKey).startsWith('YOUR_');
+
+  const DEFAULT_CATEGORY_NAMES = ['常用', '开发', '科技', '财经', 'AI', '其他'];
+  const DEFAULT_SITES = [
+    ['知乎', 'https://www.zhihu.com/', '常用', '发现问题背后的经验与观点'],
+    ['哔哩哔哩', 'https://www.bilibili.com/', '常用', '视频、课程与兴趣内容'],
+    ['少数派', 'https://sspai.com/', '常用', '效率工具与数字生活'],
+    ['GitHub', 'https://github.com/', '开发', '代码托管与开源项目'],
+    ['MDN', 'https://developer.mozilla.org/zh-CN/', '开发', 'Web 开发权威参考'],
+    ['Stack Overflow', 'https://stackoverflow.com/', '开发', '程序开发问答社区'],
+    ['Vercel', 'https://vercel.com/', '开发', '前端部署与云平台'],
+    ['IT-Tools', 'https://it-tools.tech/', '开发', '开发者常用在线工具集'],
+    ['果核剥壳', 'https://www.ghxi.com/', '科技', '软件与数字工具资讯'],
+    ['ToolFK', 'https://www.toolfk.com/', '科技', '实用在线工具集合'],
+    ['Excalidraw', 'https://excalidraw.com/', '科技', '轻量手绘风白板工具'],
+    ['东方财富', 'https://www.eastmoney.com/', '财经', '财经资讯与行情数据'],
+    ['雪球', 'https://xueqiu.com/', '财经', '投资社区与市场讨论'],
+    ['TradingView', 'https://www.tradingview.com/', '财经', '图表分析与全球市场数据'],
+    ['ChatGPT', 'https://chatgpt.com/', 'AI', '通用 AI 助手'],
+    ['Hugging Face', 'https://huggingface.co/', 'AI', 'AI 模型、数据集与应用社区'],
+    ['DeepSeek', 'https://chat.deepseek.com/', 'AI', 'AI 对话与推理工具'],
+    ['Perplexity', 'https://www.perplexity.ai/', 'AI', 'AI 搜索与研究助手'],
+    ['TinyPNG', 'https://tinypng.com/', '其他', '图片压缩工具']
+  ];
+
+  const state = {
+    client: null,
+    session: null,
+    user: null,
+    categories: [],
+    sites: [],
+    activeCategoryId: localStorage.getItem('nav_active_category_id') || 'favorites',
+    city: localStorage.getItem('nav_city') || '上海',
+    theme: localStorage.getItem('nav_theme') || 'auto',
+    provider: localStorage.getItem('nav_search_provider') || 'baidu',
+    syncing: false,
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const els = {
+    tabs: $('tabs'), grid: $('siteGrid'), clock: $('clock'), date: $('date'),
+    searchForm: $('searchForm'), searchInput: $('searchInput'), provider: $('provider'),
+    themeBtn: $('themeBtn'), weatherBtn: $('weatherBtn'), weatherTemp: $('weatherTemp'),
+    weatherCity: $('weatherCity'), weatherIcon: $('weatherIcon'), addBtn: $('addBtn'),
+    manageCategoriesBtn: $('manageCategoriesBtn'), userBtn: $('userBtn'), syncChip: $('syncChip'),
+    syncText: $('syncText'), footerText: $('footerText'), toast: $('toast'),
+    authDialog: $('authDialog'), authForm: $('authForm'), emailInput: $('emailInput'),
+    passwordInput: $('passwordInput'), authError: $('authError'), signUpBtn: $('signUpBtn'),
+    authCloseBtn: $('authCloseBtn'), accountDialog: $('accountDialog'), accountEmail: $('accountEmail'),
+    signOutBtn: $('signOutBtn'), refreshBtn: $('refreshBtn'), accountCloseBtn: $('accountCloseBtn'),
+    siteDialog: $('siteDialog'), siteForm: $('siteForm'), siteDialogTitle: $('siteDialogTitle'),
+    siteIdInput: $('siteIdInput'), nameInput: $('nameInput'), urlInput: $('urlInput'),
+    categoryInput: $('categoryInput'), descInput: $('descInput'), siteCancelBtn: $('siteCancelBtn'),
+    categoryDialog: $('categoryDialog'), categoryCreateForm: $('categoryCreateForm'),
+    newCategoryInput: $('newCategoryInput'), categoryList: $('categoryList'),
+    categoryCloseBtn: $('categoryCloseBtn')
+  };
+
+  let toastTimer;
+
+  function toast(message) {
+    clearTimeout(toastTimer);
+    els.toast.textContent = message;
+    els.toast.classList.add('show');
+    toastTimer = setTimeout(() => els.toast.classList.remove('show'), 2600);
+  }
+
+  function setSyncStatus(mode, text) {
+    els.syncChip.classList.remove('ok', 'busy', 'error');
+    if (mode) els.syncChip.classList.add(mode);
+    els.syncText.textContent = text;
+  }
+
+  function setControlsEnabled(enabled) {
+    els.addBtn.disabled = !enabled;
+    els.manageCategoriesBtn.disabled = !enabled;
+  }
+
+  function domainOf(url) {
+    try { return new URL(url).hostname.replace(/^www\./, ''); }
+    catch { return ''; }
+  }
+
+  function faviconUrl(url) {
+    const domain = domainOf(url);
+    return domain ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64` : '';
+  }
+
+  function initials(name) {
+    return [...String(name || '')].slice(0, 2).join('').toUpperCase();
+  }
+
+  function safeUrl(raw) {
+    try {
+      const u = new URL(String(raw).trim());
+      if (!['http:', 'https:'].includes(u.protocol)) return null;
+      return u.toString();
+    } catch { return null; }
+  }
+
+  function updateClock() {
+    const now = new Date();
+    els.clock.textContent = now.toLocaleTimeString('zh-CN', {
+      hour: '2-digit', minute: '2-digit', hour12: false
+    });
+    els.date.textContent = now.toLocaleDateString('zh-CN', {
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+    });
+  }
+
+  function setTheme(mode) {
+    state.theme = mode;
+    localStorage.setItem('nav_theme', mode);
+    const dark = mode === 'dark' || (mode === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    els.themeBtn.textContent = dark ? '☀' : '◐';
+    els.themeBtn.title = dark ? '切换为浅色' : '切换为深色';
+  }
+
+  function searchUrl(provider, q) {
+    const encoded = encodeURIComponent(q);
+    return {
+      baidu: `https://www.baidu.com/s?wd=${encoded}`,
+      bing: `https://www.bing.com/search?q=${encoded}`,
+      google: `https://www.google.com/search?q=${encoded}`
+    }[provider] || `https://www.baidu.com/s?wd=${encoded}`;
+  }
+
+  function weatherEmoji(code) {
+    if ([0].includes(code)) return '☀️';
+    if ([1,2,3].includes(code)) return '⛅';
+    if ([45,48].includes(code)) return '🌫️';
+    if ([51,53,55,56,57,61,63,65,66,67,80,81,82].includes(code)) return '🌧️';
+    if ([71,73,75,77,85,86].includes(code)) return '🌨️';
+    if ([95,96,99].includes(code)) return '⛈️';
+    return '🌤️';
+  }
+
+  async function loadWeather() {
+    els.weatherCity.textContent = state.city;
+    els.weatherTemp.textContent = '--°';
+    try {
+      const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(state.city)}&count=1&language=zh&format=json`);
+      const geo = await geoRes.json();
+      if (!geo.results?.length) throw new Error('city not found');
+      const { latitude, longitude, name } = geo.results[0];
+      const wxRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code&timezone=auto`);
+      const wx = await wxRes.json();
+      els.weatherTemp.textContent = `${Math.round(wx.current.temperature_2m)}°`;
+      els.weatherIcon.textContent = weatherEmoji(wx.current.weather_code);
+      els.weatherCity.textContent = name;
+    } catch {
+      els.weatherTemp.textContent = '--°';
+      els.weatherIcon.textContent = '🌤️';
+    }
+  }
+
+  function renderTabs() {
+    els.tabs.innerHTML = '';
+    const tabDefs = [
+      ...state.categories.map(c => ({ id: c.id, name: c.name })),
+      { id: 'favorites', name: '收藏' }
+    ];
+
+    if (state.activeCategoryId !== 'favorites' && !state.categories.some(c => c.id === state.activeCategoryId)) {
+      state.activeCategoryId = state.categories[0]?.id || 'favorites';
+    }
+
+    tabDefs.forEach(tab => {
+      const btn = document.createElement('button');
+      btn.className = `tab ${state.activeCategoryId === tab.id ? 'active' : ''}`;
+      btn.textContent = tab.name;
+      btn.type = 'button';
+      btn.addEventListener('click', () => {
+        state.activeCategoryId = tab.id;
+        localStorage.setItem('nav_active_category_id', tab.id);
+        renderTabs();
+        renderSites();
+      });
+      els.tabs.appendChild(btn);
+    });
+  }
+
+  function renderSites() {
+    if (!state.user) {
+      els.grid.innerHTML = '<div class="empty">请先登录。登录后，站点会从 Supabase 云端加载。</div>';
+      return;
+    }
+
+    let sites = state.sites.slice();
+    if (state.activeCategoryId === 'favorites') {
+      sites = sites.filter(s => s.is_favorite);
+    } else {
+      sites = sites.filter(s => s.category_id === state.activeCategoryId);
+    }
+    sites.sort((a,b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.name.localeCompare(b.name, 'zh-CN'));
+
+    els.grid.innerHTML = '';
+    if (!sites.length) {
+      els.grid.innerHTML = '<div class="empty">这里还没有站点。点击右上角“＋ 添加站点”开始添加。</div>';
+      return;
+    }
+
+    sites.forEach(site => {
+      const card = document.createElement('a');
+      card.className = 'site-card';
+      card.href = site.url;
+      card.target = '_blank';
+      card.rel = 'noopener noreferrer';
+
+      const head = document.createElement('div');
+      head.className = 'site-head';
+
+      const icon = document.createElement('div');
+      icon.className = 'site-icon';
+      const img = document.createElement('img');
+      img.src = site.icon_url || faviconUrl(site.url);
+      img.alt = '';
+      img.loading = 'lazy';
+      img.addEventListener('error', () => { icon.textContent = initials(site.name); });
+      icon.appendChild(img);
+
+      const name = document.createElement('div');
+      name.className = 'site-name';
+      name.textContent = site.name;
+      head.append(icon, name);
+
+      const desc = document.createElement('div');
+      desc.className = 'site-desc';
+      desc.textContent = site.description || domainOf(site.url);
+
+      const actions = document.createElement('div');
+      actions.className = 'card-actions';
+
+      const fav = document.createElement('button');
+      fav.type = 'button';
+      fav.className = `card-action favorite ${site.is_favorite ? 'active' : ''}`;
+      fav.title = site.is_favorite ? '取消收藏' : '收藏';
+      fav.textContent = site.is_favorite ? '★' : '☆';
+      fav.addEventListener('click', async (e) => {
+        e.preventDefault(); e.stopPropagation();
+        await updateFavorite(site, !site.is_favorite);
+      });
+
+      const edit = document.createElement('button');
+      edit.type = 'button'; edit.className = 'card-action'; edit.title = '编辑'; edit.textContent = '✎';
+      edit.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); openSiteDialog(site); });
+
+      const del = document.createElement('button');
+      del.type = 'button'; del.className = 'card-action delete'; del.title = '删除'; del.textContent = '×';
+      del.addEventListener('click', async (e) => { e.preventDefault(); e.stopPropagation(); await deleteSite(site); });
+
+      actions.append(fav, edit, del);
+      card.append(head, desc, actions);
+      els.grid.appendChild(card);
+    });
+  }
+
+  function renderCategoriesManager() {
+    els.categoryList.innerHTML = '';
+    if (!state.categories.length) {
+      els.categoryList.innerHTML = '<div class="empty">暂无分类。</div>';
+      return;
+    }
+
+    state.categories.forEach(category => {
+      const row = document.createElement('div');
+      row.className = 'category-row';
+      const name = document.createElement('div');
+      name.className = 'category-name';
+      name.textContent = category.name;
+
+      const actions = document.createElement('div');
+      actions.className = 'category-row-actions';
+
+      const rename = document.createElement('button');
+      rename.type = 'button'; rename.textContent = '改名';
+      rename.addEventListener('click', async () => {
+        const nextName = prompt('新的分类名称', category.name)?.trim();
+        if (!nextName || nextName === category.name) return;
+        await renameCategory(category, nextName);
+      });
+
+      const del = document.createElement('button');
+      del.type = 'button'; del.className = 'danger-link'; del.textContent = '删除';
+      del.addEventListener('click', async () => { await deleteCategory(category); });
+      actions.append(rename, del);
+      row.append(name, actions);
+      els.categoryList.appendChild(row);
+    });
+  }
+
+  function fillCategorySelect(selectedId) {
+    els.categoryInput.innerHTML = '';
+    state.categories.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.id;
+      opt.textContent = c.name;
+      els.categoryInput.appendChild(opt);
+    });
+    if (selectedId && state.categories.some(c => c.id === selectedId)) {
+      els.categoryInput.value = selectedId;
+    } else if (state.activeCategoryId !== 'favorites' && state.categories.some(c => c.id === state.activeCategoryId)) {
+      els.categoryInput.value = state.activeCategoryId;
+    }
+  }
+
+  function openSiteDialog(site = null) {
+    if (!state.user) return openAuth();
+    if (!state.categories.length) {
+      toast('请先创建一个分类');
+      els.categoryDialog.showModal();
+      return;
+    }
+    els.siteForm.reset();
+    els.siteIdInput.value = site?.id || '';
+    els.siteDialogTitle.textContent = site ? '编辑站点' : '添加站点';
+    els.nameInput.value = site?.name || '';
+    els.urlInput.value = site?.url || '';
+    els.descInput.value = site?.description || '';
+    fillCategorySelect(site?.category_id);
+    els.siteDialog.showModal();
+  }
+
+  function openAuth() {
+    els.authError.textContent = '';
+    els.authDialog.showModal();
+    setTimeout(() => els.emailInput.focus(), 50);
+  }
+
+  function updateUserUi() {
+    if (state.user) {
+      const email = state.user.email || '已登录';
+      els.userBtn.textContent = email.split('@')[0] || '账户';
+      els.userBtn.title = email;
+      els.accountEmail.textContent = email;
+      setControlsEnabled(true);
+      els.footerText.textContent = '站点、分类与收藏保存在 Supabase 云端；主题与天气城市保存在当前浏览器。';
+    } else {
+      els.userBtn.textContent = '登录';
+      els.userBtn.title = '登录';
+      els.accountEmail.textContent = '—';
+      setControlsEnabled(false);
+      els.footerText.textContent = '登录后可在 Supabase 云端同步站点、分类与收藏。';
+    }
+  }
+
+  async function seedDefaultsIfNeeded() {
+    if (!state.user) return;
+    const { count, error: countError } = await state.client
+      .from('nav_categories')
+      .select('id', { count: 'exact', head: true });
+    if (countError) throw countError;
+    if ((count || 0) > 0) return;
+
+    setSyncStatus('busy', '初始化');
+    const categoryRows = DEFAULT_CATEGORY_NAMES.map((name, i) => ({
+      user_id: state.user.id,
+      name,
+      sort_order: i * 10
+    }));
+    const { data: insertedCategories, error: catError } = await state.client
+      .from('nav_categories')
+      .insert(categoryRows)
+      .select('id,name');
+    if (catError) throw catError;
+
+    const map = Object.fromEntries(insertedCategories.map(c => [c.name, c.id]));
+    const siteRows = DEFAULT_SITES.map(([name, url, categoryName, description], i) => ({
+      user_id: state.user.id,
+      category_id: map[categoryName],
+      name, url, description,
+      sort_order: i * 10,
+      is_favorite: false
+    }));
+    const { error: siteError } = await state.client.from('nav_sites').insert(siteRows);
+    if (siteError) throw siteError;
+  }
+
+  async function loadCloudData({ seed = true } = {}) {
+    if (!state.user || state.syncing) return;
+    state.syncing = true;
+    setSyncStatus('busy', '同步中');
+    try {
+      if (seed) await seedDefaultsIfNeeded();
+
+      const [{ data: categories, error: catError }, { data: sites, error: siteError }] = await Promise.all([
+        state.client.from('nav_categories').select('*').order('sort_order', { ascending: true }).order('created_at', { ascending: true }),
+        state.client.from('nav_sites').select('*').order('sort_order', { ascending: true }).order('created_at', { ascending: true })
+      ]);
+      if (catError) throw catError;
+      if (siteError) throw siteError;
+
+      state.categories = categories || [];
+      state.sites = sites || [];
+      if (state.activeCategoryId !== 'favorites' && !state.categories.some(c => c.id === state.activeCategoryId)) {
+        state.activeCategoryId = state.categories[0]?.id || 'favorites';
+        localStorage.setItem('nav_active_category_id', state.activeCategoryId);
+      }
+      renderTabs();
+      renderSites();
+      renderCategoriesManager();
+      setSyncStatus('ok', '已同步');
+    } catch (error) {
+      console.error(error);
+      setSyncStatus('error', '同步失败');
+      toast(`同步失败：${friendlyError(error)}`);
+    } finally {
+      state.syncing = false;
+    }
+  }
+
+  function friendlyError(error) {
+    const raw = String(error?.message || error || '未知错误');
+    if (/Invalid login credentials/i.test(raw)) return '邮箱或密码不正确';
+    if (/Email not confirmed/i.test(raw)) return '请先完成邮箱验证';
+    if (/duplicate key/i.test(raw)) return '名称或网址已存在';
+    if (/Failed to fetch/i.test(raw)) return '网络连接失败';
+    return raw.length > 90 ? `${raw.slice(0, 90)}…` : raw;
+  }
+
+  async function saveSiteFromForm() {
+    const name = els.nameInput.value.trim();
+    const url = safeUrl(els.urlInput.value);
+    const categoryId = els.categoryInput.value;
+    const description = els.descInput.value.trim();
+    const id = els.siteIdInput.value;
+    if (!name || !url || !categoryId) {
+      toast('请完整填写名称、网址和分类');
+      return;
+    }
+
+    const payload = {
+      name,
+      url,
+      category_id: categoryId,
+      description: description || null,
+      updated_at: new Date().toISOString()
+    };
+
+    setSyncStatus('busy', '保存中');
+    try {
+      let result;
+      if (id) {
+        result = await state.client.from('nav_sites').update(payload).eq('id', id).select().single();
+      } else {
+        payload.user_id = state.user.id;
+        payload.sort_order = state.sites.length * 10;
+        payload.is_favorite = false;
+        result = await state.client.from('nav_sites').insert(payload).select().single();
+      }
+      if (result.error) throw result.error;
+      els.siteDialog.close();
+      state.activeCategoryId = result.data.category_id;
+      localStorage.setItem('nav_active_category_id', state.activeCategoryId);
+      await loadCloudData({ seed: false });
+      toast(id ? '站点已更新' : '站点已添加');
+    } catch (error) {
+      setSyncStatus('error', '保存失败');
+      toast(`保存失败：${friendlyError(error)}`);
+    }
+  }
+
+  async function updateFavorite(site, value) {
+    setSyncStatus('busy', '保存中');
+    const { error } = await state.client.from('nav_sites')
+      .update({ is_favorite: value, updated_at: new Date().toISOString() })
+      .eq('id', site.id);
+    if (error) {
+      setSyncStatus('error', '保存失败');
+      toast(`收藏更新失败：${friendlyError(error)}`);
+      return;
+    }
+    site.is_favorite = value;
+    renderSites();
+    setSyncStatus('ok', '已同步');
+  }
+
+  async function deleteSite(site) {
+    if (!confirm(`确定删除“${site.name}”吗？`)) return;
+    setSyncStatus('busy', '删除中');
+    const { error } = await state.client.from('nav_sites').delete().eq('id', site.id);
+    if (error) {
+      setSyncStatus('error', '删除失败');
+      toast(`删除失败：${friendlyError(error)}`);
+      return;
+    }
+    state.sites = state.sites.filter(s => s.id !== site.id);
+    renderSites();
+    setSyncStatus('ok', '已同步');
+    toast('站点已删除');
+  }
+
+  async function createCategory(name) {
+    const clean = name.trim();
+    if (!clean) return;
+    setSyncStatus('busy', '保存中');
+    const { data, error } = await state.client.from('nav_categories').insert({
+      user_id: state.user.id,
+      name: clean,
+      sort_order: state.categories.length * 10
+    }).select().single();
+    if (error) {
+      setSyncStatus('error', '保存失败');
+      toast(`添加分类失败：${friendlyError(error)}`);
+      return;
+    }
+    state.categories.push(data);
+    renderTabs();
+    renderCategoriesManager();
+    setSyncStatus('ok', '已同步');
+    toast('分类已添加');
+  }
+
+  async function renameCategory(category, nextName) {
+    setSyncStatus('busy', '保存中');
+    const { error } = await state.client.from('nav_categories')
+      .update({ name: nextName, updated_at: new Date().toISOString() })
+      .eq('id', category.id);
+    if (error) {
+      setSyncStatus('error', '保存失败');
+      toast(`改名失败：${friendlyError(error)}`);
+      return;
+    }
+    category.name = nextName;
+    renderTabs();
+    renderCategoriesManager();
+    setSyncStatus('ok', '已同步');
+  }
+
+  async function deleteCategory(category) {
+    const count = state.sites.filter(s => s.category_id === category.id).length;
+    const suffix = count ? `\n该分类下的 ${count} 个站点也会被删除。` : '';
+    if (!confirm(`确定删除分类“${category.name}”吗？${suffix}`)) return;
+    setSyncStatus('busy', '删除中');
+    const { error } = await state.client.from('nav_categories').delete().eq('id', category.id);
+    if (error) {
+      setSyncStatus('error', '删除失败');
+      toast(`删除分类失败：${friendlyError(error)}`);
+      return;
+    }
+    state.categories = state.categories.filter(c => c.id !== category.id);
+    state.sites = state.sites.filter(s => s.category_id !== category.id);
+    if (state.activeCategoryId === category.id) {
+      state.activeCategoryId = state.categories[0]?.id || 'favorites';
+      localStorage.setItem('nav_active_category_id', state.activeCategoryId);
+    }
+    renderTabs(); renderSites(); renderCategoriesManager();
+    setSyncStatus('ok', '已同步');
+    toast('分类已删除');
+  }
+
+  async function signIn(email, password) {
+    els.authError.textContent = '';
+    const { data, error } = await state.client.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    if (!data.session) throw new Error('登录未完成');
+    els.authDialog.close();
+  }
+
+  async function signUp(email, password) {
+    els.authError.textContent = '';
+    const redirectTo = cfg.siteUrl || (location.origin + location.pathname.replace(/[^/]*$/, ''));
+    const { data, error } = await state.client.auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo: redirectTo }
+    });
+    if (error) throw error;
+    if (data.session) {
+      els.authDialog.close();
+      toast('注册并登录成功');
+    } else {
+      toast('注册成功，请到邮箱完成验证后再登录');
+    }
+  }
+
+  async function handleSession(session) {
+    state.session = session;
+    state.user = session?.user || null;
+    updateUserUi();
+    if (state.user) {
+      await loadCloudData();
+    } else {
+      state.categories = [];
+      state.sites = [];
+      renderTabs();
+      renderSites();
+      setSyncStatus('', CONFIG_READY ? '未登录' : '待配置');
+    }
+  }
+
+  async function initializeSupabase() {
+    if (!CONFIG_READY) {
+      setSyncStatus('error', '待配置');
+      els.footerText.textContent = '请先在 config.js 填入 Supabase Project URL 和 Publishable key。';
+      els.grid.innerHTML = '<div class="empty">Supabase 尚未配置。先按 README.md 完成数据库与 config.js 配置。</div>';
+      els.userBtn.textContent = '待配置';
+      els.userBtn.disabled = true;
+      return;
+    }
+
+    state.client = window.supabase.createClient(cfg.supabaseUrl, cfg.supabasePublishableKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true
+      }
+    });
+
+    const { data, error } = await state.client.auth.getSession();
+    if (error) console.error(error);
+    await handleSession(data?.session || null);
+
+    state.client.auth.onAuthStateChange((event, session) => {
+      if (event === 'INITIAL_SESSION') return;
+      setTimeout(() => handleSession(session), 0);
+    });
+  }
+
+  // Search & local preferences
+  els.provider.value = state.provider;
+  els.provider.addEventListener('change', () => {
+    state.provider = els.provider.value;
+    localStorage.setItem('nav_search_provider', state.provider);
+  });
+
+  els.searchForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const q = els.searchInput.value.trim();
+    if (!q) return;
+    window.open(searchUrl(els.provider.value, q), '_blank', 'noopener,noreferrer');
+  });
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      e.preventDefault(); els.searchInput.focus();
+    }
+  });
+
+  els.themeBtn.addEventListener('click', () => {
+    const isDark = document.documentElement.dataset.theme === 'dark';
+    setTheme(isDark ? 'light' : 'dark');
+  });
+
+  els.weatherBtn.addEventListener('click', async () => {
+    const city = prompt('输入天气城市，例如：北京、上海、深圳', state.city);
+    if (!city?.trim()) return;
+    state.city = city.trim();
+    localStorage.setItem('nav_city', state.city);
+    await loadWeather();
+  });
+
+  // Auth UI
+  els.userBtn.addEventListener('click', () => {
+    if (!CONFIG_READY) return;
+    if (state.user) els.accountDialog.showModal(); else openAuth();
+  });
+  els.authCloseBtn.addEventListener('click', () => els.authDialog.close());
+  els.accountCloseBtn.addEventListener('click', () => els.accountDialog.close());
+
+  els.authForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await signIn(els.emailInput.value.trim(), els.passwordInput.value);
+    } catch (error) {
+      els.authError.textContent = friendlyError(error);
+    }
+  });
+
+  els.signUpBtn.addEventListener('click', async () => {
+    const email = els.emailInput.value.trim();
+    const password = els.passwordInput.value;
+    if (!email || password.length < 6) {
+      els.authError.textContent = '请输入邮箱，并使用至少 6 位密码';
+      return;
+    }
+    try { await signUp(email, password); }
+    catch (error) { els.authError.textContent = friendlyError(error); }
+  });
+
+  els.signOutBtn.addEventListener('click', async () => {
+    const { error } = await state.client.auth.signOut();
+    if (error) return toast(`退出失败：${friendlyError(error)}`);
+    els.accountDialog.close();
+    toast('已退出登录');
+  });
+
+  els.refreshBtn.addEventListener('click', async () => {
+    els.accountDialog.close();
+    await loadCloudData({ seed: false });
+  });
+
+  // Site CRUD
+  els.addBtn.addEventListener('click', () => openSiteDialog());
+  els.siteCancelBtn.addEventListener('click', () => els.siteDialog.close());
+  els.siteForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    await saveSiteFromForm();
+  });
+
+  // Category CRUD
+  els.manageCategoriesBtn.addEventListener('click', () => {
+    renderCategoriesManager();
+    els.categoryDialog.showModal();
+  });
+  els.categoryCloseBtn.addEventListener('click', () => els.categoryDialog.close());
+  els.categoryCreateForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = els.newCategoryInput.value.trim();
+    if (!name) return;
+    await createCategory(name);
+    els.newCategoryInput.value = '';
+  });
+
+  // Initial render
+  setTheme(state.theme);
+  updateClock();
+  loadWeather();
+  setInterval(updateClock, 1000);
+  renderTabs();
+  renderSites();
+  updateUserUi();
+  initializeSupabase().catch((error) => {
+    console.error(error);
+    setSyncStatus('error', '初始化失败');
+    toast(`初始化失败：${friendlyError(error)}`);
+  });
+})();
+
+</script>
+</body>
+</html>
