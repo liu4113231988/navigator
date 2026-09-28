@@ -116,3 +116,27 @@ grant select, insert, update, delete on table public.nav_sites to authenticated;
 -- 不给 anon 角色开放数据表权限；未登录用户不能读取导航数据。
 revoke all on table public.nav_categories from anon;
 revoke all on table public.nav_sites from anon;
+
+-- Storage policies for site-icons
+-- Bucket 需要在 Supabase Storage 中手动创建，ID 必须为 site-icons，并建议设为 Public。
+-- 登录用户只能向自己的 UID 目录上传，并只能删除自己拥有的对象。
+
+drop policy if exists "site_icons_insert_own" on storage.objects;
+create policy "site_icons_insert_own"
+on storage.objects
+for insert
+to authenticated
+with check (
+  bucket_id = 'site-icons'
+  and (storage.foldername(name))[1] = (select auth.uid()::text)
+);
+
+drop policy if exists "site_icons_delete_own" on storage.objects;
+create policy "site_icons_delete_own"
+on storage.objects
+for delete
+to authenticated
+using (
+  bucket_id = 'site-icons'
+  and owner_id = (select auth.uid()::text)
+);
