@@ -636,6 +636,7 @@ window.NAV_CONFIG = {
     categories: [],
     sites: [],
     activeCategoryId: null,
+    categoryInitialized: false,
     city: localStorage.getItem('nav_city') || '上海',
     province: localStorage.getItem('nav_province') || inferProvince(localStorage.getItem('nav_city') || '上海'),
     theme: localStorage.getItem('nav_theme') || 'auto',
@@ -974,7 +975,7 @@ window.NAV_CONFIG = {
   }
 
   function defaultCategoryId() {
-    return state.categories.find(c => c.name === '常用')?.id
+    return state.categories.find(c => String(c.name || '').trim() === '常用')?.id
       || state.categories[0]?.id
       || 'favorites';
   }
@@ -986,8 +987,10 @@ window.NAV_CONFIG = {
       { id: 'favorites', name: '收藏' }
     ];
 
-    if (state.activeCategoryId !== 'favorites' && !state.categories.some(c => c.id === state.activeCategoryId)) {
-      state.activeCategoryId = defaultCategoryId();
+    if (state.categories.length) {
+      const activeExists = state.activeCategoryId === 'favorites'
+        || state.categories.some(c => c.id === state.activeCategoryId);
+      if (!activeExists) state.activeCategoryId = defaultCategoryId();
     }
 
     tabDefs.forEach(tab => {
@@ -1226,9 +1229,18 @@ window.NAV_CONFIG = {
 
       state.categories = categories || [];
       state.sites = sites || [];
-      if (state.activeCategoryId !== 'favorites' && !state.categories.some(c => c.id === state.activeCategoryId)) {
+
+      // 每次用户会话首次加载云端分类时，强制从“常用”开始。
+      // 之后用户在当前会话内切换到其他 Tab，不会被同步/编辑操作强制切回。
+      if (!state.categoryInitialized) {
         state.activeCategoryId = defaultCategoryId();
+        state.categoryInitialized = true;
+      } else {
+        const activeExists = state.activeCategoryId === 'favorites'
+          || state.categories.some(c => c.id === state.activeCategoryId);
+        if (!activeExists) state.activeCategoryId = defaultCategoryId();
       }
+
       renderTabs();
       renderSites();
       renderCategoriesManager();
@@ -1454,14 +1466,22 @@ window.NAV_CONFIG = {
   }
 
   async function handleSession(session) {
+    const nextUser = session?.user || null;
+    if ((state.user?.id || null) !== (nextUser?.id || null)) {
+      state.activeCategoryId = null;
+      state.categoryInitialized = false;
+    }
+
     state.session = session;
-    state.user = session?.user || null;
+    state.user = nextUser;
     updateUserUi();
     if (state.user) {
       await loadCloudData();
     } else {
       state.categories = [];
       state.sites = [];
+      state.activeCategoryId = null;
+      state.categoryInitialized = false;
       renderTabs();
       renderSites();
       setSyncStatus('', CONFIG_READY ? '未登录' : '待配置');
