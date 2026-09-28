@@ -204,6 +204,22 @@ dialog::backdrop { background: rgba(12,18,30,.38); backdrop-filter: blur(4px); }
 .btn.danger { background: color-mix(in srgb,var(--danger) 12%,var(--panel-solid)); color: var(--danger); border: 1px solid color-mix(in srgb,var(--danger) 25%,var(--line)); }
 .auth-error { min-height: 18px; font-size: 12px; color: var(--danger); margin-top: 6px; }
 
+.site-icon-picker {
+  display: flex; align-items: center; gap: 14px; padding: 12px;
+  border: 1px solid var(--line); border-radius: 14px; background: var(--bg);
+}
+.site-icon-preview {
+  width: 58px; height: 58px; flex: 0 0 auto; border-radius: 15px; overflow: hidden;
+  display: grid; place-items: center; border: 1px solid var(--line);
+  background: var(--panel-solid); color: var(--brand); font-weight: 800; font-size: 13px;
+}
+.site-icon-preview img { width: 100%; height: 100%; object-fit: contain; padding: 8px; }
+.site-icon-controls { min-width: 0; flex: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.site-icon-controls input[type="file"] { display: none; }
+.site-icon-file-label { display: inline-flex; align-items: center; justify-content: center; }
+.site-icon-hint { width: 100%; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.site-icon-filename { width: 100%; color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
 .category-create { display: grid; grid-template-columns: 1fr auto; gap: 10px; margin: 12px 0 16px; }
 .category-list { display: grid; gap: 8px; max-height: 320px; overflow: auto; }
 .category-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; padding: 10px 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; }
@@ -404,6 +420,22 @@ dialog::backdrop { background: rgba(12,18,30,.38); backdrop-filter: blur(4px); }
         <input id="urlInput" required type="url" maxlength="500" placeholder="https://example.com" />
       </div>
       <div class="field">
+        <label>网站图标（可选）</label>
+        <div class="site-icon-picker">
+          <div class="site-icon-preview" id="iconPreview">
+            <img id="iconPreviewImg" alt="" hidden />
+            <span id="iconPreviewText">自动</span>
+          </div>
+          <div class="site-icon-controls">
+            <label class="btn secondary site-icon-file-label" for="iconFileInput">选择图标</label>
+            <input id="iconFileInput" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/x-icon,.ico" />
+            <button class="btn secondary" type="button" id="removeIconBtn">使用自动图标</button>
+            <div class="site-icon-filename" id="iconFileName">未选择文件，将自动获取网站图标。</div>
+            <div class="site-icon-hint">支持 PNG / JPG / WebP / SVG / ICO，单个文件不超过 512 KB。上传文件将保存到 Supabase Storage 的 site-icons Bucket。</div>
+          </div>
+        </div>
+      </div>
+      <div class="field">
         <label for="categoryInput">分类</label>
         <select id="categoryInput" required></select>
       </div>
@@ -455,6 +487,12 @@ window.NAV_CONFIG = {
     cfg.supabasePublishableKey &&
     !String(cfg.supabaseUrl).startsWith('YOUR_') &&
     !String(cfg.supabasePublishableKey).startsWith('YOUR_');
+
+  const SITE_ICON_BUCKET = 'site-icons';
+  const ICON_MAX_BYTES = 512 * 1024;
+  const ICON_ALLOWED_TYPES = new Set([
+    'image/png', 'image/jpeg', 'image/webp', 'image/svg+xml', 'image/x-icon', 'image/vnd.microsoft.icon'
+  ]);
 
   const DEFAULT_CATEGORY_NAMES = ['常用', '开发', '科技', '财经', 'AI', '其他'];
   const DEFAULT_SITES = [
@@ -540,6 +578,10 @@ window.NAV_CONFIG = {
     theme: localStorage.getItem('nav_theme') || 'auto',
     provider: localStorage.getItem('nav_search_provider') || 'baidu',
     syncing: false,
+    pendingIconFile: null,
+    existingIconUrl: null,
+    removeIconRequested: false,
+    iconPreviewObjectUrl: null,
   };
 
   const $ = (id) => document.getElementById(id);
@@ -560,7 +602,10 @@ window.NAV_CONFIG = {
     signOutBtn: $('signOutBtn'), refreshBtn: $('refreshBtn'), accountCloseBtn: $('accountCloseBtn'),
     siteDialog: $('siteDialog'), siteForm: $('siteForm'), siteDialogTitle: $('siteDialogTitle'),
     siteIdInput: $('siteIdInput'), nameInput: $('nameInput'), urlInput: $('urlInput'),
+    iconFileInput: $('iconFileInput'), iconPreview: $('iconPreview'), iconPreviewImg: $('iconPreviewImg'),
+    iconPreviewText: $('iconPreviewText'), iconFileName: $('iconFileName'), removeIconBtn: $('removeIconBtn'),
     categoryInput: $('categoryInput'), descInput: $('descInput'), siteCancelBtn: $('siteCancelBtn'),
+    saveSiteBtn: $('saveSiteBtn'),
     categoryDialog: $('categoryDialog'), categoryCreateForm: $('categoryCreateForm'),
     newCategoryInput: $('newCategoryInput'), categoryList: $('categoryList'),
     categoryCloseBtn: $('categoryCloseBtn')
@@ -594,6 +639,96 @@ window.NAV_CONFIG = {
   function faviconUrl(url) {
     const domain = domainOf(url);
     return domain ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64` : '';
+  }
+
+  function clearIconPreviewObjectUrl() {
+    if (state.iconPreviewObjectUrl) {
+      URL.revokeObjectURL(state.iconPreviewObjectUrl);
+      state.iconPreviewObjectUrl = null;
+    }
+  }
+
+  function showIconPreview(src, fallbackText = '自动') {
+    clearIconPreviewObjectUrl();
+    els.iconPreviewImg.hidden = true;
+    els.iconPreviewImg.removeAttribute('src');
+    els.iconPreviewText.hidden = false;
+    els.iconPreviewText.textContent = fallbackText;
+
+    if (!src) return;
+    els.iconPreviewImg.src = src;
+    els.iconPreviewImg.hidden = false;
+    els.iconPreviewText.hidden = true;
+    els.iconPreviewImg.onerror = () => {
+      els.iconPreviewImg.hidden = true;
+      els.iconPreviewText.hidden = false;
+      els.iconPreviewText.textContent = fallbackText;
+    };
+  }
+
+  function showIconFilePreview(file) {
+    clearIconPreviewObjectUrl();
+    state.iconPreviewObjectUrl = URL.createObjectURL(file);
+    els.iconPreviewImg.src = state.iconPreviewObjectUrl;
+    els.iconPreviewImg.hidden = false;
+    els.iconPreviewText.hidden = true;
+    els.iconPreviewImg.onerror = () => {
+      els.iconPreviewImg.hidden = true;
+      els.iconPreviewText.hidden = false;
+      els.iconPreviewText.textContent = '文件';
+    };
+  }
+
+  function iconExtension(file) {
+    const typeMap = {
+      'image/png': 'png',
+      'image/jpeg': 'jpg',
+      'image/webp': 'webp',
+      'image/svg+xml': 'svg',
+      'image/x-icon': 'ico',
+      'image/vnd.microsoft.icon': 'ico'
+    };
+    if (typeMap[file.type]) return typeMap[file.type];
+    const ext = String(file.name || '').split('.').pop().toLowerCase();
+    return ['png','jpg','jpeg','webp','svg','ico'].includes(ext) ? (ext === 'jpeg' ? 'jpg' : ext) : 'bin';
+  }
+
+  function storageIconPathFromUrl(url) {
+    if (!url) return null;
+    const marker = `/storage/v1/object/public/${SITE_ICON_BUCKET}/`;
+    const index = String(url).indexOf(marker);
+    if (index < 0) return null;
+    const raw = String(url).slice(index + marker.length).split('?')[0];
+    try { return decodeURIComponent(raw); }
+    catch { return raw; }
+  }
+
+  async function uploadSiteIcon(file) {
+    if (!state.user) throw new Error('请先登录');
+    const ext = iconExtension(file);
+    const path = `${state.user.id}/${crypto.randomUUID()}.${ext}`;
+    const options = { cacheControl: '31536000', upsert: false };
+    if (file.type) options.contentType = file.type;
+
+    const { error } = await state.client.storage
+      .from(SITE_ICON_BUCKET)
+      .upload(path, file, options);
+    if (error) throw error;
+
+    const { data } = state.client.storage.from(SITE_ICON_BUCKET).getPublicUrl(path);
+    if (!data?.publicUrl) {
+      await state.client.storage.from(SITE_ICON_BUCKET).remove([path]).catch(() => {});
+      throw new Error('无法生成图标公开地址');
+    }
+    return { path, url: data.publicUrl };
+  }
+
+  async function removeStoredIconByUrl(url) {
+    const path = storageIconPathFromUrl(url);
+    if (!path) return false;
+    const { error } = await state.client.storage.from(SITE_ICON_BUCKET).remove([path]);
+    if (error) throw error;
+    return true;
   }
 
   function initials(name) {
@@ -938,6 +1073,15 @@ window.NAV_CONFIG = {
     els.nameInput.value = site?.name || '';
     els.urlInput.value = site?.url || '';
     els.descInput.value = site?.description || '';
+    state.pendingIconFile = null;
+    state.existingIconUrl = site?.icon_url || null;
+    state.removeIconRequested = false;
+    els.iconFileInput.value = '';
+    els.iconFileName.textContent = site?.icon_url
+      ? '当前使用已上传/自定义图标。可重新选择文件替换。'
+      : '未选择文件，将自动获取网站图标。';
+    const initialPreview = site?.icon_url || faviconUrl(site?.url || '');
+    showIconPreview(initialPreview, initials(site?.name || '自动'));
     fillCategorySelect(site?.category_id);
     els.siteDialog.showModal();
   }
@@ -1035,6 +1179,9 @@ window.NAV_CONFIG = {
     if (/Invalid login credentials/i.test(raw)) return '邮箱或密码不正确';
     if (/Email not confirmed/i.test(raw)) return '请先完成邮箱验证';
     if (/duplicate key/i.test(raw)) return '名称或网址已存在';
+    if (/Bucket not found|bucket.*not found/i.test(raw)) return '图标存储 Bucket 尚未创建，请在 Supabase Storage 创建公开 Bucket：site-icons';
+    if (/row-level security|violates.*policy|Unauthorized|not authorized/i.test(raw)) return '图标存储权限不足，请检查 site-icons 的 Storage RLS 策略';
+    if (/payload too large|file size/i.test(raw)) return '图标文件过大';
     if (/Failed to fetch/i.test(raw)) return '网络连接失败';
     return raw.length > 90 ? `${raw.slice(0, 90)}…` : raw;
   }
@@ -1058,26 +1205,54 @@ window.NAV_CONFIG = {
       updated_at: new Date().toISOString()
     };
 
-    setSyncStatus('busy', '保存中');
+    const oldIconUrl = state.existingIconUrl;
+    let uploadedIcon = null;
+    let result = null;
+
+    setSyncStatus('busy', state.pendingIconFile ? '上传图标' : '保存中');
+    els.saveSiteBtn.disabled = true;
+    els.saveSiteBtn.textContent = state.pendingIconFile ? '上传并保存…' : '保存中…';
+
     try {
-      let result;
+      if (state.pendingIconFile) {
+        uploadedIcon = await uploadSiteIcon(state.pendingIconFile);
+        payload.icon_url = uploadedIcon.url;
+      } else if (state.removeIconRequested) {
+        payload.icon_url = null;
+      }
+
       if (id) {
         result = await state.client.from('nav_sites').update(payload).eq('id', id).select().single();
       } else {
         payload.user_id = state.user.id;
         payload.sort_order = state.sites.length * 10;
         payload.is_favorite = false;
+        if (!('icon_url' in payload)) payload.icon_url = null;
         result = await state.client.from('nav_sites').insert(payload).select().single();
       }
       if (result.error) throw result.error;
+
+      if ((uploadedIcon || state.removeIconRequested) && oldIconUrl && oldIconUrl !== result.data.icon_url) {
+        try { await removeStoredIconByUrl(oldIconUrl); }
+        catch (cleanupError) { console.warn('旧图标清理失败', cleanupError); }
+      }
+
+      clearIconPreviewObjectUrl();
       els.siteDialog.close();
       state.activeCategoryId = result.data.category_id;
       localStorage.setItem('nav_active_category_id', state.activeCategoryId);
       await loadCloudData({ seed: false });
       toast(id ? '站点已更新' : '站点已添加');
     } catch (error) {
+      if (uploadedIcon?.url) {
+        try { await removeStoredIconByUrl(uploadedIcon.url); }
+        catch (cleanupError) { console.warn('新图标回滚清理失败', cleanupError); }
+      }
       setSyncStatus('error', '保存失败');
       toast(`保存失败：${friendlyError(error)}`);
+    } finally {
+      els.saveSiteBtn.disabled = false;
+      els.saveSiteBtn.textContent = '保存';
     }
   }
 
@@ -1105,10 +1280,20 @@ window.NAV_CONFIG = {
       toast(`删除失败：${friendlyError(error)}`);
       return;
     }
+
+    let iconCleanupFailed = false;
+    if (site.icon_url) {
+      try { await removeStoredIconByUrl(site.icon_url); }
+      catch (cleanupError) {
+        console.warn('站点图标清理失败', cleanupError);
+        iconCleanupFailed = true;
+      }
+    }
+
     state.sites = state.sites.filter(s => s.id !== site.id);
     renderSites();
     setSyncStatus('ok', '已同步');
-    toast('站点已删除');
+    toast(iconCleanupFailed ? '站点已删除，但旧图标清理失败' : '站点已删除');
   }
 
   async function createCategory(name) {
@@ -1149,7 +1334,8 @@ window.NAV_CONFIG = {
   }
 
   async function deleteCategory(category) {
-    const count = state.sites.filter(s => s.category_id === category.id).length;
+    const categorySites = state.sites.filter(s => s.category_id === category.id);
+    const count = categorySites.length;
     const suffix = count ? `\n该分类下的 ${count} 个站点也会被删除。` : '';
     if (!confirm(`确定删除分类“${category.name}”吗？${suffix}`)) return;
     setSyncStatus('busy', '删除中');
@@ -1159,6 +1345,12 @@ window.NAV_CONFIG = {
       toast(`删除分类失败：${friendlyError(error)}`);
       return;
     }
+
+    const storedIcons = categorySites.map(s => s.icon_url).filter(Boolean);
+    if (storedIcons.length) {
+      await Promise.allSettled(storedIcons.map(url => removeStoredIconByUrl(url)));
+    }
+
     state.categories = state.categories.filter(c => c.id !== category.id);
     state.sites = state.sites.filter(s => s.category_id !== category.id);
     if (state.activeCategoryId === category.id) {
@@ -1321,9 +1513,55 @@ window.NAV_CONFIG = {
     await loadCloudData({ seed: false });
   });
 
+  // Site icon upload
+  els.iconFileInput.addEventListener('change', () => {
+    const file = els.iconFileInput.files?.[0];
+    if (!file) return;
+
+    const ext = iconExtension(file);
+    const supportedByType = ICON_ALLOWED_TYPES.has(file.type);
+    const supportedByExt = ['png','jpg','webp','svg','ico'].includes(ext);
+    if (!supportedByType && !supportedByExt) {
+      els.iconFileInput.value = '';
+      toast('不支持该图标格式，请选择 PNG、JPG、WebP、SVG 或 ICO');
+      return;
+    }
+    if (file.size > ICON_MAX_BYTES) {
+      els.iconFileInput.value = '';
+      toast('图标文件不能超过 512 KB');
+      return;
+    }
+
+    state.pendingIconFile = file;
+    state.removeIconRequested = false;
+    els.iconFileName.textContent = `${file.name} · ${Math.max(1, Math.round(file.size / 1024))} KB`;
+    showIconFilePreview(file);
+  });
+
+  els.removeIconBtn.addEventListener('click', () => {
+    state.pendingIconFile = null;
+    state.removeIconRequested = true;
+    els.iconFileInput.value = '';
+    els.iconFileName.textContent = '保存后将移除自定义图标，并恢复为网站自动图标。';
+    showIconPreview(faviconUrl(els.urlInput.value), initials(els.nameInput.value || '自动'));
+  });
+
+  els.urlInput.addEventListener('input', () => {
+    if (state.pendingIconFile || (state.existingIconUrl && !state.removeIconRequested)) return;
+    showIconPreview(faviconUrl(els.urlInput.value), initials(els.nameInput.value || '自动'));
+  });
+
+  els.nameInput.addEventListener('input', () => {
+    if (!els.iconPreviewImg.hidden) return;
+    els.iconPreviewText.textContent = initials(els.nameInput.value || '自动');
+  });
+
   // Site CRUD
   els.addBtn.addEventListener('click', () => openSiteDialog());
-  els.siteCancelBtn.addEventListener('click', () => els.siteDialog.close());
+  els.siteCancelBtn.addEventListener('click', () => {
+    clearIconPreviewObjectUrl();
+    els.siteDialog.close();
+  });
   els.siteForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     await saveSiteFromForm();
