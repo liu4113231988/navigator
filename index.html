@@ -635,7 +635,7 @@ window.NAV_CONFIG = {
     user: null,
     categories: [],
     sites: [],
-    activeCategoryId: localStorage.getItem('nav_active_category_id') || 'favorites',
+    activeCategoryId: null,
     city: localStorage.getItem('nav_city') || '上海',
     province: localStorage.getItem('nav_province') || inferProvince(localStorage.getItem('nav_city') || '上海'),
     theme: localStorage.getItem('nav_theme') || 'auto',
@@ -973,6 +973,12 @@ window.NAV_CONFIG = {
     }
   }
 
+  function defaultCategoryId() {
+    return state.categories.find(c => c.name === '常用')?.id
+      || state.categories[0]?.id
+      || 'favorites';
+  }
+
   function renderTabs() {
     els.tabs.innerHTML = '';
     const tabDefs = [
@@ -981,7 +987,7 @@ window.NAV_CONFIG = {
     ];
 
     if (state.activeCategoryId !== 'favorites' && !state.categories.some(c => c.id === state.activeCategoryId)) {
-      state.activeCategoryId = state.categories[0]?.id || 'favorites';
+      state.activeCategoryId = defaultCategoryId();
     }
 
     tabDefs.forEach(tab => {
@@ -991,7 +997,6 @@ window.NAV_CONFIG = {
       btn.type = 'button';
       btn.addEventListener('click', () => {
         state.activeCategoryId = tab.id;
-        localStorage.setItem('nav_active_category_id', tab.id);
         renderTabs();
         renderSites();
       });
@@ -1222,8 +1227,7 @@ window.NAV_CONFIG = {
       state.categories = categories || [];
       state.sites = sites || [];
       if (state.activeCategoryId !== 'favorites' && !state.categories.some(c => c.id === state.activeCategoryId)) {
-        state.activeCategoryId = state.categories[0]?.id || 'favorites';
-        localStorage.setItem('nav_active_category_id', state.activeCategoryId);
+        state.activeCategoryId = defaultCategoryId();
       }
       renderTabs();
       renderSites();
@@ -1304,7 +1308,6 @@ window.NAV_CONFIG = {
       clearIconPreviewObjectUrl();
       els.siteDialog.close();
       state.activeCategoryId = result.data.category_id;
-      localStorage.setItem('nav_active_category_id', state.activeCategoryId);
       await loadCloudData({ seed: false });
       toast(id ? '站点已更新' : '站点已添加');
     } catch (error) {
@@ -1418,8 +1421,7 @@ window.NAV_CONFIG = {
     state.categories = state.categories.filter(c => c.id !== category.id);
     state.sites = state.sites.filter(s => s.category_id !== category.id);
     if (state.activeCategoryId === category.id) {
-      state.activeCategoryId = state.categories[0]?.id || 'favorites';
-      localStorage.setItem('nav_active_category_id', state.activeCategoryId);
+      state.activeCategoryId = defaultCategoryId();
     }
     renderTabs(); renderSites(); renderCategoriesManager();
     setSyncStatus('ok', '已同步');
