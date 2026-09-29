@@ -21,6 +21,7 @@ create table if not exists public.nav_sites (
   description text check (description is null or char_length(description) <= 120),
   icon_url text,
   is_favorite boolean not null default false,
+  favorite_at timestamptz,
   sort_order integer,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -30,6 +31,13 @@ create table if not exists public.nav_sites (
 -- 兼容已经创建过 nav_sites 的项目：排序允许为空，且不再自动写入 0。
 alter table public.nav_sites alter column sort_order drop not null;
 alter table public.nav_sites alter column sort_order drop default;
+alter table public.nav_sites add column if not exists favorite_at timestamptz;
+
+-- 旧收藏没有独立收藏时间时，用最近更新时间（否则创建时间）回填一次。
+update public.nav_sites
+set favorite_at = coalesce(favorite_at, updated_at, created_at)
+where is_favorite = true
+  and favorite_at is null;
 
 create index if not exists nav_categories_user_sort_idx
   on public.nav_categories(user_id, sort_order, created_at);
@@ -39,6 +47,9 @@ create index if not exists nav_sites_user_category_sort_idx
 
 create index if not exists nav_sites_user_favorite_idx
   on public.nav_sites(user_id, is_favorite);
+
+create index if not exists nav_sites_user_favorite_time_idx
+  on public.nav_sites(user_id, is_favorite, favorite_at desc);
 
 alter table public.nav_categories enable row level security;
 alter table public.nav_sites enable row level security;
