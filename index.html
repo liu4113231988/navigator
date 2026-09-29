@@ -503,6 +503,11 @@ dialog::backdrop { background: rgba(12,18,30,.38); backdrop-filter: blur(4px); }
         <select id="categoryInput" required></select>
       </div>
       <div class="field">
+        <label for="sortOrderInput">排序（可选）</label>
+        <input id="sortOrderInput" type="number" step="1" placeholder="例如：10；数值越小越靠前" />
+        <div class="site-icon-hint">同一分类内按排序值由小到大；留空时按创建时间由早到晚。</div>
+      </div>
+      <div class="field">
         <label for="descInput">说明（可选）</label>
         <input id="descInput" maxlength="120" placeholder="一句话说明用途" />
       </div>
@@ -668,8 +673,8 @@ window.NAV_CONFIG = {
     siteIdInput: $('siteIdInput'), nameInput: $('nameInput'), urlInput: $('urlInput'),
     iconFileInput: $('iconFileInput'), iconPreview: $('iconPreview'), iconPreviewImg: $('iconPreviewImg'),
     iconPreviewText: $('iconPreviewText'), iconFileName: $('iconFileName'), removeIconBtn: $('removeIconBtn'),
-    categoryInput: $('categoryInput'), descInput: $('descInput'), siteCancelBtn: $('siteCancelBtn'),
-    saveSiteBtn: $('saveSiteBtn'),
+    categoryInput: $('categoryInput'), sortOrderInput: $('sortOrderInput'), descInput: $('descInput'),
+    siteCancelBtn: $('siteCancelBtn'), saveSiteBtn: $('saveSiteBtn'),
     categoryDialog: $('categoryDialog'), categoryCreateForm: $('categoryCreateForm'),
     newCategoryInput: $('newCategoryInput'), categoryList: $('categoryList'),
     categoryCloseBtn: $('categoryCloseBtn')
@@ -1007,6 +1012,23 @@ window.NAV_CONFIG = {
     });
   }
 
+  function compareSites(a, b) {
+    const aHasSort = Number.isFinite(a.sort_order);
+    const bHasSort = Number.isFinite(b.sort_order);
+
+    // 显式排序值优先，并按由小到大排列。
+    if (aHasSort && bHasSort) {
+      const diff = a.sort_order - b.sort_order;
+      if (diff !== 0) return diff;
+      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    }
+
+    // 未填写排序值的站点放在显式排序项之后，并按创建时间由早到晚。
+    if (aHasSort !== bHasSort) return aHasSort ? -1 : 1;
+
+    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+  }
+
   function renderSites() {
     if (!state.user) {
       els.grid.innerHTML = '<div class="empty">请先登录。登录后，站点会从 Supabase 云端加载。</div>';
@@ -1019,7 +1041,7 @@ window.NAV_CONFIG = {
     } else {
       sites = sites.filter(s => s.category_id === state.activeCategoryId);
     }
-    sites.sort((a,b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.name.localeCompare(b.name, 'zh-CN'));
+    sites.sort(compareSites);
 
     els.grid.innerHTML = '';
     if (!sites.length) {
@@ -1144,6 +1166,7 @@ window.NAV_CONFIG = {
     els.siteDialogTitle.textContent = site ? '编辑站点' : '添加站点';
     els.nameInput.value = site?.name || '';
     els.urlInput.value = site?.url || '';
+    els.sortOrderInput.value = Number.isFinite(site?.sort_order) ? String(site.sort_order) : '';
     els.descInput.value = site?.description || '';
     state.pendingIconFile = null;
     state.existingIconUrl = site?.icon_url || null;
@@ -1202,13 +1225,17 @@ window.NAV_CONFIG = {
     if (catError) throw catError;
 
     const map = Object.fromEntries(insertedCategories.map(c => [c.name, c.id]));
-    const siteRows = DEFAULT_SITES.map(([name, url, categoryName, description], i) => ({
-      user_id: state.user.id,
-      category_id: map[categoryName],
-      name, url, description,
-      sort_order: i * 10,
-      is_favorite: false
-    }));
+    const categorySortCounters = {};
+    const siteRows = DEFAULT_SITES.map(([name, url, categoryName, description]) => {
+      categorySortCounters[categoryName] = (categorySortCounters[categoryName] || 0) + 10;
+      return {
+        user_id: state.user.id,
+        category_id: map[categoryName],
+        name, url, description,
+        sort_order: categorySortCounters[categoryName],
+        is_favorite: false
+      };
+    });
     const { error: siteError } = await state.client.from('nav_sites').insert(siteRows);
     if (siteError) throw siteError;
   }
@@ -1222,7 +1249,7 @@ window.NAV_CONFIG = {
 
       const [{ data: categories, error: catError }, { data: sites, error: siteError }] = await Promise.all([
         state.client.from('nav_categories').select('*').order('sort_order', { ascending: true }).order('created_at', { ascending: true }),
-        state.client.from('nav_sites').select('*').order('sort_order', { ascending: true }).order('created_at', { ascending: true })
+        state.client.from('nav_sites').select('*').order('created_at', { ascending: true })
       ]);
       if (catError) throw catError;
       if (siteError) throw siteError;
@@ -1270,10 +1297,17 @@ window.NAV_CONFIG = {
     const name = els.nameInput.value.trim();
     const url = safeUrl(els.urlInput.value);
     const categoryId = els.categoryInput.value;
+    const sortRaw = els.sortOrderInput.value.trim();
+    const sortOrder = sortRaw === '' ? null : Number(sortRaw);
     const description = els.descInput.value.trim();
     const id = els.siteIdInput.value;
+
     if (!name || !url || !categoryId) {
       toast('请完整填写名称、网址和分类');
+      return;
+    }
+    if (sortOrder !== null && !Number.isInteger(sortOrder)) {
+      toast('排序必须填写整数，或留空');
       return;
     }
 
@@ -1281,6 +1315,7 @@ window.NAV_CONFIG = {
       name,
       url,
       category_id: categoryId,
+      sort_order: sortOrder,
       description: description || null,
       updated_at: new Date().toISOString()
     };
@@ -1305,7 +1340,6 @@ window.NAV_CONFIG = {
         result = await state.client.from('nav_sites').update(payload).eq('id', id).select().single();
       } else {
         payload.user_id = state.user.id;
-        payload.sort_order = state.sites.length * 10;
         payload.is_favorite = false;
         if (!('icon_url' in payload)) payload.icon_url = null;
         result = await state.client.from('nav_sites').insert(payload).select().single();
