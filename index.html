@@ -283,7 +283,8 @@ dialog::backdrop { background: rgba(12,18,30,.38); backdrop-filter: blur(4px); }
 .category-create { display: grid; grid-template-columns: 1fr auto; gap: 10px; margin: 12px 0 16px; }
 .category-list { display: grid; gap: 8px; max-height: 320px; overflow: auto; }
 .category-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; padding: 10px 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; }
-.category-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.category-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 8px; }
+.category-order { flex: 0 0 auto; color: var(--muted); font-size: 11px; font-weight: 500; }
 .category-row-actions { display: flex; gap: 6px; }
 .category-row-actions button { border: 0; background: var(--panel-solid); color: var(--muted); border-radius: 8px; cursor: pointer; padding: 6px 9px; }
 .category-row-actions button:hover { color: var(--text); }
@@ -487,14 +488,14 @@ dialog::backdrop { background: rgba(12,18,30,.38); backdrop-filter: blur(4px); }
         <div class="site-icon-picker">
           <div class="site-icon-preview" id="iconPreview">
             <img id="iconPreviewImg" alt="" hidden />
-            <span id="iconPreviewText">自动</span>
+            <span id="iconPreviewText">首字</span>
           </div>
           <div class="site-icon-controls">
             <label class="btn secondary site-icon-file-label" for="iconFileInput">选择图标</label>
             <input id="iconFileInput" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/x-icon,.ico" />
-            <button class="btn secondary" type="button" id="removeIconBtn">使用自动图标</button>
-            <div class="site-icon-filename" id="iconFileName">未选择文件，将自动获取网站图标。</div>
-            <div class="site-icon-hint">支持 PNG / JPG / WebP / SVG / ICO，单个文件不超过 512 KB。上传文件将保存到 Supabase Storage 的 site-icons Bucket。</div>
+            <button class="btn secondary" type="button" id="removeIconBtn">移除图标</button>
+            <div class="site-icon-filename" id="iconFileName">未选择文件，将显示网站名称首字。</div>
+            <div class="site-icon-hint">支持 PNG / JPG / WebP / SVG / ICO，单个文件不超过 512 KB。图标仅来自手动上传并保存到 Supabase Storage；不访问第三方图标服务。</div>
           </div>
         </div>
       </div>
@@ -521,7 +522,7 @@ dialog::backdrop { background: rgba(12,18,30,.38); backdrop-filter: blur(4px); }
   <dialog id="categoryDialog">
     <div class="modal">
       <h3>分类管理</h3>
-      <p>可以新增、改名或删除分类。删除分类时，该分类下的站点也会一并删除。</p>
+      <p>可以新增、改名、调整排序或删除分类。分类按排序值由小到大显示；删除分类时，该分类下的站点也会一并删除。</p>
       <form class="category-create" id="categoryCreateForm">
         <input id="newCategoryInput" maxlength="40" required placeholder="新分类名称" />
         <button class="btn primary" type="submit">添加</button>
@@ -703,11 +704,6 @@ window.NAV_CONFIG = {
   function domainOf(url) {
     try { return new URL(url).hostname.replace(/^www\./, ''); }
     catch { return ''; }
-  }
-
-  function faviconUrl(url) {
-    const domain = domainOf(url);
-    return domain ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64` : '';
   }
 
   function clearIconPreviewObjectUrl() {
@@ -1029,6 +1025,12 @@ window.NAV_CONFIG = {
     return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
   }
 
+  function compareFavoriteSites(a, b) {
+    const aTime = new Date(a.favorite_at || a.updated_at || a.created_at).getTime();
+    const bTime = new Date(b.favorite_at || b.updated_at || b.created_at).getTime();
+    return bTime - aTime;
+  }
+
   function renderSites() {
     if (!state.user) {
       els.grid.innerHTML = '<div class="empty">请先登录。登录后，站点会从 Supabase 云端加载。</div>';
@@ -1038,10 +1040,11 @@ window.NAV_CONFIG = {
     let sites = state.sites.slice();
     if (state.activeCategoryId === 'favorites') {
       sites = sites.filter(s => s.is_favorite);
+      sites.sort(compareFavoriteSites);
     } else {
       sites = sites.filter(s => s.category_id === state.activeCategoryId);
+      sites.sort(compareSites);
     }
-    sites.sort(compareSites);
 
     els.grid.innerHTML = '';
     if (!sites.length) {
@@ -1062,12 +1065,16 @@ window.NAV_CONFIG = {
 
       const icon = document.createElement('div');
       icon.className = 'site-icon';
-      const img = document.createElement('img');
-      img.src = site.icon_url || faviconUrl(site.url);
-      img.alt = '';
-      img.loading = 'lazy';
-      img.addEventListener('error', () => { icon.textContent = initials(site.name); });
-      icon.appendChild(img);
+      if (site.icon_url) {
+        const img = document.createElement('img');
+        img.src = site.icon_url;
+        img.alt = '';
+        img.loading = 'lazy';
+        img.addEventListener('error', () => { icon.textContent = initials(site.name); });
+        icon.appendChild(img);
+      } else {
+        icon.textContent = initials(site.name);
+      }
 
       const name = document.createElement('div');
       name.className = 'site-name';
@@ -1117,10 +1124,25 @@ window.NAV_CONFIG = {
       row.className = 'category-row';
       const name = document.createElement('div');
       name.className = 'category-name';
-      name.textContent = category.name;
+      const nameText = document.createElement('span');
+      nameText.textContent = category.name;
+      const orderText = document.createElement('span');
+      orderText.className = 'category-order';
+      orderText.textContent = `排序 ${category.sort_order ?? 0}`;
+      name.append(nameText, orderText);
 
       const actions = document.createElement('div');
       actions.className = 'category-row-actions';
+
+      const sort = document.createElement('button');
+      sort.type = 'button'; sort.textContent = '排序';
+      sort.addEventListener('click', async () => {
+        const raw = prompt('分类排序值（整数，越小越靠前）', String(category.sort_order ?? 0));
+        if (raw === null) return;
+        const value = Number(raw.trim());
+        if (!Number.isInteger(value)) return toast('分类排序必须是整数');
+        await updateCategorySort(category, value);
+      });
 
       const rename = document.createElement('button');
       rename.type = 'button'; rename.textContent = '改名';
@@ -1133,7 +1155,7 @@ window.NAV_CONFIG = {
       const del = document.createElement('button');
       del.type = 'button'; del.className = 'danger-link'; del.textContent = '删除';
       del.addEventListener('click', async () => { await deleteCategory(category); });
-      actions.append(rename, del);
+      actions.append(sort, rename, del);
       row.append(name, actions);
       els.categoryList.appendChild(row);
     });
@@ -1173,10 +1195,10 @@ window.NAV_CONFIG = {
     state.removeIconRequested = false;
     els.iconFileInput.value = '';
     els.iconFileName.textContent = site?.icon_url
-      ? '当前使用已上传/自定义图标。可重新选择文件替换。'
-      : '未选择文件，将自动获取网站图标。';
-    const initialPreview = site?.icon_url || faviconUrl(site?.url || '');
-    showIconPreview(initialPreview, initials(site?.name || '自动'));
+      ? '当前使用已上传图标。可重新选择文件替换。'
+      : '未上传图标，将显示网站名称首字。';
+    const initialPreview = site?.icon_url || null;
+    showIconPreview(initialPreview, initials(site?.name || '首字'));
     fillCategorySelect(site?.category_id);
     els.siteDialog.showModal();
   }
@@ -1285,6 +1307,7 @@ window.NAV_CONFIG = {
     const raw = String(error?.message || error || '未知错误');
     if (/Invalid login credentials/i.test(raw)) return '邮箱或密码不正确';
     if (/Email not confirmed/i.test(raw)) return '请先完成邮箱验证';
+    if (/favorite_at|schema cache/i.test(raw)) return '数据库尚未升级，请在 Supabase SQL Editor 执行最新 supabase.sql';
     if (/duplicate key/i.test(raw)) return '名称或网址已存在';
     if (/Bucket not found|bucket.*not found/i.test(raw)) return '图标存储 Bucket 尚未创建，请在 Supabase Storage 创建公开 Bucket：site-icons';
     if (/row-level security|violates.*policy|Unauthorized|not authorized/i.test(raw)) return '图标存储权限不足，请检查 site-icons 的 Storage RLS 策略';
@@ -1371,8 +1394,10 @@ window.NAV_CONFIG = {
 
   async function updateFavorite(site, value) {
     setSyncStatus('busy', '保存中');
+    const now = new Date().toISOString();
+    const favoriteAt = value ? now : null;
     const { error } = await state.client.from('nav_sites')
-      .update({ is_favorite: value, updated_at: new Date().toISOString() })
+      .update({ is_favorite: value, favorite_at: favoriteAt, updated_at: now })
       .eq('id', site.id);
     if (error) {
       setSyncStatus('error', '保存失败');
@@ -1380,6 +1405,7 @@ window.NAV_CONFIG = {
       return;
     }
     site.is_favorite = value;
+    site.favorite_at = favoriteAt;
     renderSites();
     setSyncStatus('ok', '已同步');
   }
@@ -1409,14 +1435,41 @@ window.NAV_CONFIG = {
     toast(iconCleanupFailed ? '站点已删除，但旧图标清理失败' : '站点已删除');
   }
 
+  function compareCategories(a, b) {
+    const diff = (a.sort_order ?? 0) - (b.sort_order ?? 0);
+    if (diff !== 0) return diff;
+    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+  }
+
+  async function updateCategorySort(category, value) {
+    setSyncStatus('busy', '保存中');
+    const { error } = await state.client.from('nav_categories')
+      .update({ sort_order: value, updated_at: new Date().toISOString() })
+      .eq('id', category.id);
+    if (error) {
+      setSyncStatus('error', '保存失败');
+      toast(`分类排序保存失败：${friendlyError(error)}`);
+      return;
+    }
+    category.sort_order = value;
+    state.categories.sort(compareCategories);
+    renderTabs();
+    renderCategoriesManager();
+    setSyncStatus('ok', '已同步');
+    toast('分类排序已更新');
+  }
+
   async function createCategory(name) {
     const clean = name.trim();
     if (!clean) return;
     setSyncStatus('busy', '保存中');
+    const nextSortOrder = state.categories.length
+      ? Math.max(...state.categories.map(c => c.sort_order ?? 0)) + 10
+      : 0;
     const { data, error } = await state.client.from('nav_categories').insert({
       user_id: state.user.id,
       name: clean,
-      sort_order: state.categories.length * 10
+      sort_order: nextSortOrder
     }).select().single();
     if (error) {
       setSyncStatus('error', '保存失败');
@@ -1424,6 +1477,7 @@ window.NAV_CONFIG = {
       return;
     }
     state.categories.push(data);
+    state.categories.sort(compareCategories);
     renderTabs();
     renderCategoriesManager();
     setSyncStatus('ok', '已同步');
@@ -1662,13 +1716,8 @@ window.NAV_CONFIG = {
     state.pendingIconFile = null;
     state.removeIconRequested = true;
     els.iconFileInput.value = '';
-    els.iconFileName.textContent = '保存后将移除自定义图标，并恢复为网站自动图标。';
-    showIconPreview(faviconUrl(els.urlInput.value), initials(els.nameInput.value || '自动'));
-  });
-
-  els.urlInput.addEventListener('input', () => {
-    if (state.pendingIconFile || (state.existingIconUrl && !state.removeIconRequested)) return;
-    showIconPreview(faviconUrl(els.urlInput.value), initials(els.nameInput.value || '自动'));
+    els.iconFileName.textContent = '保存后将移除已上传图标，并显示网站名称首字。';
+    showIconPreview(null, initials(els.nameInput.value || '首字'));
   });
 
   els.nameInput.addEventListener('input', () => {
