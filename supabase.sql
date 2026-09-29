@@ -21,11 +21,15 @@ create table if not exists public.nav_sites (
   description text check (description is null or char_length(description) <= 120),
   icon_url text,
   is_favorite boolean not null default false,
-  sort_order integer not null default 0,
+  sort_order integer,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (user_id, url)
 );
+
+-- 兼容已经创建过 nav_sites 的项目：排序允许为空，且不再自动写入 0。
+alter table public.nav_sites alter column sort_order drop not null;
+alter table public.nav_sites alter column sort_order drop default;
 
 create index if not exists nav_categories_user_sort_idx
   on public.nav_categories(user_id, sort_order, created_at);
