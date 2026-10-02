@@ -142,13 +142,41 @@ button:disabled { opacity: .48; cursor: not-allowed !important; }
 .clock { font-size: clamp(48px,8vw,82px); line-height: 1; font-weight: 760; letter-spacing: -3px; margin-bottom: 8px; }
 .date { color: var(--muted); font-size: 15px; margin-bottom: 16px; }
 .search-shell {
+  position: relative; z-index: 16;
   width: min(940px,100%); margin: 0 auto; display: flex; align-items: center; padding: 7px; gap: 8px;
   border-radius: 18px; background: var(--panel-solid); border: 1px solid var(--line); box-shadow: var(--shadow);
 }
+.search-shell:focus-within { border-color: color-mix(in srgb,var(--brand) 34%,var(--line)); }
 .search-provider { border: 0; background: transparent; color: var(--text); outline: none; padding-left: 8px; width: 92px; cursor: pointer; }
 .search-input { flex: 1; min-width: 0; border: 0; outline: 0; color: var(--text); background: transparent; font-size: 17px; padding: 13px 6px; }
 .search-input::placeholder { color: color-mix(in srgb,var(--muted) 75%,transparent); }
 .search-btn { border: 0; color: #fff; background: linear-gradient(135deg,var(--brand),var(--brand-2)); border-radius: 13px; padding: 13px 22px; cursor: pointer; font-weight: 700; min-width: 88px; box-shadow: 0 8px 18px rgba(79,124,255,.24); }
+.search-suggestions {
+  position: absolute; left: 0; right: 0; top: calc(100% + 8px);
+  display: none; max-height: 360px; overflow-y: auto; padding: 6px;
+  border: 1px solid var(--line); border-radius: 15px;
+  background: color-mix(in srgb,var(--panel-solid) 97%,transparent);
+  backdrop-filter: blur(18px); box-shadow: 0 18px 50px rgba(24,34,64,.14);
+  text-align: left;
+}
+.search-suggestions.show { display: block; }
+.search-suggestion {
+  width: 100%; display: grid; grid-template-columns: 36px minmax(0,1fr) auto;
+  align-items: center; gap: 10px; border: 0; border-radius: 10px;
+  padding: 8px 10px; background: transparent; color: var(--text); cursor: pointer;
+  text-align: left;
+}
+.search-suggestion:hover, .search-suggestion.active { background: color-mix(in srgb,var(--brand) 9%,transparent); }
+.suggestion-icon {
+  width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center;
+  background: color-mix(in srgb,var(--brand) 9%,var(--bg)); color: var(--brand);
+  font-size: 14px; font-weight: 750; overflow: hidden;
+}
+.suggestion-icon img { width: 27px; height: 27px; object-fit: contain; }
+.suggestion-main { min-width: 0; }
+.suggestion-title { font-size: 13.5px; font-weight: 650; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.suggestion-meta { margin-top: 2px; color: var(--muted); font-size: 11.5px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.suggestion-kind { color: var(--muted); font-size: 11px; white-space: nowrap; }
 .shortcut { margin-top: 8px; color: var(--muted); font-size: 12px; }
 
 .nav-panel {
@@ -384,8 +412,10 @@ dialog::backdrop { background: rgba(12,18,30,.38); backdrop-filter: blur(4px); }
           <option value="bing">Bing</option>
           <option value="google">Google</option>
         </select>
-        <input class="search-input" id="searchInput" placeholder="搜索你想找的内容…" autocomplete="off" />
+        <input class="search-input" id="searchInput" placeholder="搜索网站或输入关键词…" autocomplete="off"
+          role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="searchSuggestions" />
         <button class="search-btn" type="submit">搜索</button>
+        <div class="search-suggestions" id="searchSuggestions" role="listbox" aria-label="搜索建议"></div>
       </form>
       <div class="shortcut">快捷键：Ctrl / ⌘ + K 聚焦搜索</div>
     </section>
@@ -647,6 +677,8 @@ window.NAV_CONFIG = {
     province: localStorage.getItem('nav_province') || inferProvince(localStorage.getItem('nav_city') || '上海'),
     theme: localStorage.getItem('nav_theme') || 'auto',
     provider: localStorage.getItem('nav_search_provider') || 'baidu',
+    searchSuggestions: [],
+    searchActiveIndex: -1,
     syncing: false,
     pendingIconFile: null,
     existingIconUrl: null,
@@ -658,6 +690,7 @@ window.NAV_CONFIG = {
   const els = {
     tabs: $('tabs'), grid: $('siteGrid'), clock: $('clock'), date: $('date'),
     searchForm: $('searchForm'), searchInput: $('searchInput'), provider: $('provider'),
+    searchSuggestions: $('searchSuggestions'),
     themeBtn: $('themeBtn'), weatherBtn: $('weatherBtn'), weatherTemp: $('weatherTemp'),
     weatherCity: $('weatherCity'), weatherIcon: $('weatherIcon'), forecastStrip: $('forecastStrip'),
     weatherDialog: $('weatherDialog'),
@@ -834,6 +867,228 @@ window.NAV_CONFIG = {
       bing: `https://www.bing.com/search?q=${encoded}`,
       google: `https://www.google.com/search?q=${encoded}`
     }[provider] || `https://www.baidu.com/s?wd=${encoded}`;
+  }
+
+  const SEARCH_HISTORY_KEY = 'nav_search_history';
+  const SEARCH_HISTORY_LIMIT = 12;
+
+  function searchProviderName(provider) {
+    return { baidu: '百度', bing: 'Bing', google: 'Google' }[provider] || '搜索';
+  }
+
+  function getSearchHistory() {
+    try {
+      const value = JSON.parse(localStorage.getItem(SEARCH_HISTORY_KEY) || '[]');
+      return Array.isArray(value)
+        ? value.filter(v => typeof v === 'string' && v.trim()).slice(0, SEARCH_HISTORY_LIMIT)
+        : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function rememberSearch(query) {
+    const clean = String(query || '').trim();
+    if (!clean) return;
+    const history = getSearchHistory().filter(item => item.toLowerCase() !== clean.toLowerCase());
+    history.unshift(clean);
+    localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(history.slice(0, SEARCH_HISTORY_LIMIT)));
+  }
+
+  function normalizeDirectUrl(value) {
+    const raw = String(value || '').trim();
+    if (!raw || /\s/.test(raw)) return null;
+    const candidate = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    try {
+      const url = new URL(candidate);
+      if (!['http:', 'https:'].includes(url.protocol)) return null;
+      const host = url.hostname;
+      if (!host || (!host.includes('.') && host !== 'localhost')) return null;
+      return url.toString();
+    } catch {
+      return null;
+    }
+  }
+
+  function siteMatchScore(site, keyword) {
+    const q = keyword.toLowerCase();
+    const name = String(site.name || '').toLowerCase();
+    const domain = domainOf(site.url).toLowerCase();
+    const url = String(site.url || '').toLowerCase();
+    const desc = String(site.description || '').toLowerCase();
+
+    if (name === q) return 0;
+    if (name.startsWith(q)) return 1;
+    if (name.includes(q)) return 2;
+    if (domain.startsWith(q)) return 3;
+    if (domain.includes(q) || url.includes(q)) return 4;
+    if (desc.includes(q)) return 5;
+    return 99;
+  }
+
+  function buildSearchSuggestions(query) {
+    const q = String(query || '').trim();
+    if (!q) return [];
+
+    const qLower = q.toLowerCase();
+    const items = state.sites
+      .map(site => ({ site, score: siteMatchScore(site, q) }))
+      .filter(item => item.score < 99)
+      .sort((a, b) => a.score - b.score || compareSites(a.site, b.site))
+      .slice(0, 6)
+      .map(({ site }) => ({ type: 'site', site }));
+
+    const directUrl = normalizeDirectUrl(q);
+    if (directUrl && !items.some(item => item.type === 'site' && item.site.url === directUrl)) {
+      items.push({ type: 'url', url: directUrl, query: q });
+    }
+
+    getSearchHistory()
+      .filter(item => item.toLowerCase().includes(qLower) && item.toLowerCase() !== qLower)
+      .slice(0, 3)
+      .forEach(item => items.push({ type: 'history', query: item }));
+
+    items.push({ type: 'search', query: q, provider: els.provider.value });
+    return items.slice(0, 10);
+  }
+
+  function suggestionCategoryName(site) {
+    return state.categories.find(c => c.id === site.category_id)?.name || '';
+  }
+
+  function hideSearchSuggestions() {
+    state.searchSuggestions = [];
+    state.searchActiveIndex = -1;
+    els.searchSuggestions.classList.remove('show');
+    els.searchSuggestions.innerHTML = '';
+    els.searchInput.setAttribute('aria-expanded', 'false');
+    els.searchInput.removeAttribute('aria-activedescendant');
+  }
+
+  function renderSearchSuggestions() {
+    const items = buildSearchSuggestions(els.searchInput.value);
+    state.searchSuggestions = items;
+    state.searchActiveIndex = -1;
+    els.searchSuggestions.innerHTML = '';
+
+    if (!items.length) {
+      hideSearchSuggestions();
+      return;
+    }
+
+    items.forEach((item, index) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'search-suggestion';
+      btn.id = `searchSuggestion-${index}`;
+      btn.setAttribute('role', 'option');
+
+      const icon = document.createElement('span');
+      icon.className = 'suggestion-icon';
+
+      const main = document.createElement('span');
+      main.className = 'suggestion-main';
+
+      const title = document.createElement('span');
+      title.className = 'suggestion-title';
+
+      const meta = document.createElement('span');
+      meta.className = 'suggestion-meta';
+
+      const kind = document.createElement('span');
+      kind.className = 'suggestion-kind';
+
+      if (item.type === 'site') {
+        const site = item.site;
+        if (site.icon_url) {
+          const img = document.createElement('img');
+          img.src = site.icon_url;
+          img.alt = '';
+          img.addEventListener('error', () => { icon.textContent = initials(site.name); });
+          icon.appendChild(img);
+        } else {
+          icon.textContent = initials(site.name);
+        }
+        title.textContent = site.name;
+        const category = suggestionCategoryName(site);
+        meta.textContent = category ? `${domainOf(site.url)} · ${category}` : domainOf(site.url);
+        kind.textContent = '站点';
+      } else if (item.type === 'url') {
+        icon.textContent = '↗';
+        title.textContent = `打开 ${item.query}`;
+        meta.textContent = item.url;
+        kind.textContent = '网址';
+      } else if (item.type === 'history') {
+        icon.textContent = '↺';
+        title.textContent = item.query;
+        meta.textContent = '最近搜索';
+        kind.textContent = '历史';
+      } else {
+        icon.textContent = '⌕';
+        title.textContent = `搜索“${item.query}”`;
+        meta.textContent = `使用 ${searchProviderName(item.provider)} 搜索`;
+        kind.textContent = '搜索';
+      }
+
+      main.append(title, meta);
+      btn.append(icon, main, kind);
+      btn.addEventListener('mousedown', e => e.preventDefault());
+      btn.addEventListener('click', () => executeSearchSuggestion(item));
+      els.searchSuggestions.appendChild(btn);
+    });
+
+    els.searchSuggestions.classList.add('show');
+    els.searchInput.setAttribute('aria-expanded', 'true');
+  }
+
+  function setSearchActiveIndex(index) {
+    const buttons = [...els.searchSuggestions.querySelectorAll('.search-suggestion')];
+    if (!buttons.length) return;
+    state.searchActiveIndex = ((index % buttons.length) + buttons.length) % buttons.length;
+    buttons.forEach((button, i) => {
+      const active = i === state.searchActiveIndex;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+    const activeButton = buttons[state.searchActiveIndex];
+    activeButton?.scrollIntoView({ block: 'nearest' });
+    if (activeButton) els.searchInput.setAttribute('aria-activedescendant', activeButton.id);
+  }
+
+  function executeSearchSuggestion(item) {
+    if (!item) return;
+    hideSearchSuggestions();
+
+    if (item.type === 'site') {
+      window.open(item.site.url, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    if (item.type === 'url') {
+      window.open(item.url, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    const query = item.query.trim();
+    if (!query) return;
+    rememberSearch(query);
+    els.searchInput.value = query;
+    window.open(searchUrl(els.provider.value, query), '_blank', 'noopener,noreferrer');
+  }
+
+  function submitSearchInput() {
+    const q = els.searchInput.value.trim();
+    if (!q) return;
+
+    const directUrl = normalizeDirectUrl(q);
+    if (directUrl) {
+      hideSearchSuggestions();
+      window.open(directUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    rememberSearch(q);
+    hideSearchSuggestions();
+    window.open(searchUrl(els.provider.value, q), '_blank', 'noopener,noreferrer');
   }
 
   function weatherEmoji(code) {
@@ -1609,17 +1864,51 @@ window.NAV_CONFIG = {
   els.provider.addEventListener('change', () => {
     state.provider = els.provider.value;
     localStorage.setItem('nav_search_provider', state.provider);
+    if (els.searchInput.value.trim()) renderSearchSuggestions();
+  });
+
+  els.searchInput.addEventListener('input', renderSearchSuggestions);
+  els.searchInput.addEventListener('focus', () => {
+    if (els.searchInput.value.trim()) renderSearchSuggestions();
+  });
+
+  els.searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown' && state.searchSuggestions.length) {
+      e.preventDefault();
+      setSearchActiveIndex(state.searchActiveIndex + 1);
+      return;
+    }
+    if (e.key === 'ArrowUp' && state.searchSuggestions.length) {
+      e.preventDefault();
+      setSearchActiveIndex(state.searchActiveIndex <= 0 ? state.searchSuggestions.length - 1 : state.searchActiveIndex - 1);
+      return;
+    }
+    if (e.key === 'Enter' && state.searchActiveIndex >= 0) {
+      e.preventDefault();
+      executeSearchSuggestion(state.searchSuggestions[state.searchActiveIndex]);
+      return;
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      hideSearchSuggestions();
+    }
   });
 
   els.searchForm.addEventListener('submit', (e) => {
     e.preventDefault();
-    const q = els.searchInput.value.trim();
-    if (!q) return;
-    window.open(searchUrl(els.provider.value, q), '_blank', 'noopener,noreferrer');
+    submitSearchInput();
   });
+
+  document.addEventListener('pointerdown', (e) => {
+    if (!els.searchForm.contains(e.target)) hideSearchSuggestions();
+  });
+
   document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-      e.preventDefault(); els.searchInput.focus();
+      e.preventDefault();
+      els.searchInput.focus();
+      els.searchInput.select();
+      if (els.searchInput.value.trim()) renderSearchSuggestions();
     }
   });
 
