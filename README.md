@@ -24,7 +24,7 @@ https://iqfgmwiifvopplaqkspq.supabase.co
 - 每个分类内的网站排序互相独立
 - 网站排序值由小到大；排序为空时按创建时间由早到晚
 - 收藏按收藏时间排序，最近收藏的排在前面
-- 搜索框支持站点候选、搜索历史、网址直达以及 ↑/↓/Enter/Esc 键盘操作
+- 搜索框支持百度 / Bing / Google 实时联想词，并融合少量本地站点候选、搜索历史、网址直达以及 ↑/↓/Enter/Esc 键盘操作
 - 网站图标仅支持手动上传到 Supabase Storage
 - 未上传图标时显示网站名称首字，不调用第三方 favicon / Logo 服务
 - 天气地区和主题保存在当前浏览器
@@ -180,3 +180,16 @@ unique (user_id, url)
 - 数据库密码
 
 `site-icons` 是 Public Bucket，因此图片可公开读取；上传和删除仍由 Storage RLS 限制到当前登录用户。
+
+
+## 搜索联想
+
+搜索框会根据当前选择的搜索引擎请求对应的公开搜索联想接口：
+
+- 百度：Baidu Suggest
+- Bing：Bing Suggestions
+- Google：Google Suggest
+
+请求使用约 320 ms 防抖，并设置超时；如果第三方联想接口不可用，会自动保留本地站点、搜索历史和普通搜索入口，不影响基本搜索功能。
+
+这些联想接口属于搜索引擎提供的公开/内部接口，接口格式可能随服务方调整而变化。
