@@ -679,6 +679,7 @@ window.NAV_CONFIG = {
     provider: localStorage.getItem('nav_search_provider') || 'baidu',
     searchSuggestions: [],
     searchActiveIndex: -1,
+    searchSuggestSeq: 0,
     syncing: false,
     pendingIconFile: null,
     existingIconUrl: null,
@@ -926,32 +927,147 @@ window.NAV_CONFIG = {
     return 99;
   }
 
-  function buildSearchSuggestions(query) {
+  function buildSearchSuggestions(query, remoteSuggestions = []) {
     const q = String(query || '').trim();
     if (!q) return [];
 
     const qLower = q.toLowerCase();
-    const items = state.sites
+    const items = [];
+
+    // 本地已保存站点仍优先保留少量入口，作为导航快捷项。
+    state.sites
       .map(site => ({ site, score: siteMatchScore(site, q) }))
       .filter(item => item.score < 99)
       .sort((a, b) => a.score - b.score || compareSites(a.site, b.site))
-      .slice(0, 6)
-      .map(({ site }) => ({ type: 'site', site }));
+      .slice(0, 2)
+      .forEach(({ site }) => items.push({ type: 'site', site }));
+
+    // 搜索引擎实时联想词是主要候选来源。
+    const seen = new Set([qLower]);
+    remoteSuggestions
+      .map(v => String(v || '').trim())
+      .filter(Boolean)
+      .filter(value => {
+        const key = value.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, 7)
+      .forEach(value => items.push({
+        type: 'suggest',
+        query: value,
+        provider: els.provider.value
+      }));
 
     const directUrl = normalizeDirectUrl(q);
     if (directUrl && !items.some(item => item.type === 'site' && item.site.url === directUrl)) {
       items.push({ type: 'url', url: directUrl, query: q });
     }
 
-    getSearchHistory()
-      .filter(item => item.toLowerCase().includes(qLower) && item.toLowerCase() !== qLower)
-      .slice(0, 3)
-      .forEach(item => items.push({ type: 'history', query: item }));
+    // 当在线联想词较少或请求失败时，用本地搜索历史补足。
+    if (remoteSuggestions.length < 4) {
+      getSearchHistory()
+        .filter(item => item.toLowerCase().includes(qLower) && item.toLowerCase() !== qLower)
+        .slice(0, 2)
+        .forEach(item => {
+          if (!seen.has(item.toLowerCase())) {
+            seen.add(item.toLowerCase());
+            items.push({ type: 'history', query: item });
+          }
+        });
+    }
 
     items.push({ type: 'search', query: q, provider: els.provider.value });
-    return items.slice(0, 10);
+    return items.slice(0, 11);
   }
 
+  let searchSuggestTimer = null;
+
+  function jsonpRequest(baseUrl, params, callbackParam = 'callback', timeoutMs = 2600) {
+    return new Promise((resolve, reject) => {
+      const callbackName = `__navSuggest_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      const url = new URL(baseUrl);
+      Object.entries(params || {}).forEach(([key, value]) => url.searchParams.set(key, value));
+      url.searchParams.set(callbackParam, callbackName);
+
+      const script = document.createElement('script');
+      let done = false;
+      let timer = null;
+
+      const cleanup = () => {
+        if (timer) clearTimeout(timer);
+        script.remove();
+        try { delete window[callbackName]; }
+        catch { window[callbackName] = undefined; }
+      };
+
+      window[callbackName] = (data) => {
+        if (done) return;
+        done = true;
+        cleanup();
+        resolve(data);
+      };
+
+      script.async = true;
+      script.src = url.toString();
+      script.onerror = () => {
+        if (done) return;
+        done = true;
+        cleanup();
+        reject(new Error('搜索联想服务请求失败'));
+      };
+
+      timer = setTimeout(() => {
+        if (done) return;
+        done = true;
+        cleanup();
+        reject(new Error('搜索联想服务响应超时'));
+      }, timeoutMs);
+
+      document.head.appendChild(script);
+    });
+  }
+
+  async function fetchProviderSuggestions(query, provider) {
+    const q = String(query || '').trim();
+    if (!q) return [];
+
+    if (provider === 'baidu') {
+      const data = await jsonpRequest(
+        'https://suggestion.baidu.com/su',
+        { wd: q },
+        'cb'
+      );
+      return Array.isArray(data?.s) ? data.s : [];
+    }
+
+    if (provider === 'bing') {
+      const data = await jsonpRequest(
+        'https://api.bing.com/qsonhs.aspx',
+        { q, type: 'cb' },
+        'cb'
+      );
+      const groups = data?.AS?.Results;
+      if (!Array.isArray(groups)) return [];
+      return groups.flatMap(group =>
+        Array.isArray(group?.Suggests)
+          ? group.Suggests.map(item => item?.Txt).filter(Boolean)
+          : []
+      );
+    }
+
+    if (provider === 'google') {
+      const data = await jsonpRequest(
+        'https://suggestqueries.google.com/complete/search',
+        { client: 'firefox', hl: 'zh-CN', q },
+        'callback'
+      );
+      return Array.isArray(data?.[1]) ? data[1] : [];
+    }
+
+    return [];
+  }
   function suggestionCategoryName(site) {
     return state.categories.find(c => c.id === site.category_id)?.name || '';
   }
@@ -965,8 +1081,8 @@ window.NAV_CONFIG = {
     els.searchInput.removeAttribute('aria-activedescendant');
   }
 
-  function renderSearchSuggestions() {
-    const items = buildSearchSuggestions(els.searchInput.value);
+  function renderSearchSuggestions(remoteSuggestions = []) {
+    const items = buildSearchSuggestions(els.searchInput.value, remoteSuggestions);
     state.searchSuggestions = items;
     state.searchActiveIndex = -1;
     els.searchSuggestions.innerHTML = '';
@@ -1013,6 +1129,11 @@ window.NAV_CONFIG = {
         const category = suggestionCategoryName(site);
         meta.textContent = category ? `${domainOf(site.url)} · ${category}` : domainOf(site.url);
         kind.textContent = '站点';
+      } else if (item.type === 'suggest') {
+        icon.textContent = '⌕';
+        title.textContent = item.query;
+        meta.textContent = `${searchProviderName(item.provider)} 搜索联想`;
+        kind.textContent = '联想';
       } else if (item.type === 'url') {
         icon.textContent = '↗';
         title.textContent = `打开 ${item.query}`;
@@ -1041,6 +1162,36 @@ window.NAV_CONFIG = {
     els.searchInput.setAttribute('aria-expanded', 'true');
   }
 
+  function scheduleSearchSuggestions({ immediate = false } = {}) {
+    clearTimeout(searchSuggestTimer);
+
+    const query = els.searchInput.value.trim();
+    if (!query) {
+      state.searchSuggestSeq += 1;
+      hideSearchSuggestions();
+      return;
+    }
+
+    // 先立即显示本地站点 / 历史 / 搜索入口，避免等待网络。
+    renderSearchSuggestions([]);
+
+    const seq = ++state.searchSuggestSeq;
+    const provider = els.provider.value;
+    const delay = immediate ? 0 : 320;
+
+    searchSuggestTimer = setTimeout(async () => {
+      try {
+        const suggestions = await fetchProviderSuggestions(query, provider);
+        if (seq !== state.searchSuggestSeq) return;
+        if (els.searchInput.value.trim() !== query || els.provider.value !== provider) return;
+        renderSearchSuggestions(suggestions);
+      } catch (error) {
+        if (seq !== state.searchSuggestSeq) return;
+        console.warn('搜索联想获取失败', error);
+        // 保留本地候选，不影响正常搜索。
+      }
+    }, delay);
+  }
   function setSearchActiveIndex(index) {
     const buttons = [...els.searchSuggestions.querySelectorAll('.search-suggestion')];
     if (!buttons.length) return;
@@ -1864,12 +2015,12 @@ window.NAV_CONFIG = {
   els.provider.addEventListener('change', () => {
     state.provider = els.provider.value;
     localStorage.setItem('nav_search_provider', state.provider);
-    if (els.searchInput.value.trim()) renderSearchSuggestions();
+    if (els.searchInput.value.trim()) scheduleSearchSuggestions({ immediate: true });
   });
 
-  els.searchInput.addEventListener('input', renderSearchSuggestions);
+  els.searchInput.addEventListener('input', () => scheduleSearchSuggestions());
   els.searchInput.addEventListener('focus', () => {
-    if (els.searchInput.value.trim()) renderSearchSuggestions();
+    if (els.searchInput.value.trim()) scheduleSearchSuggestions({ immediate: true });
   });
 
   els.searchInput.addEventListener('keydown', (e) => {
@@ -1908,7 +2059,7 @@ window.NAV_CONFIG = {
       e.preventDefault();
       els.searchInput.focus();
       els.searchInput.select();
-      if (els.searchInput.value.trim()) renderSearchSuggestions();
+      if (els.searchInput.value.trim()) scheduleSearchSuggestions({ immediate: true });
     }
   });
 
