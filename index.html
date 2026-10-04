@@ -153,7 +153,7 @@ button:disabled { opacity: .48; cursor: not-allowed !important; }
 .search-btn { border: 0; color: #fff; background: linear-gradient(135deg,var(--brand),var(--brand-2)); border-radius: 13px; padding: 13px 22px; cursor: pointer; font-weight: 700; min-width: 88px; box-shadow: 0 8px 18px rgba(79,124,255,.24); }
 .search-suggestions {
   position: absolute; left: 0; right: 0; top: calc(100% + 8px);
-  display: none; max-height: 360px; overflow-y: auto; padding: 6px;
+  display: none; max-height: 440px; overflow-y: auto; padding: 5px;
   border: 1px solid var(--line); border-radius: 15px;
   background: color-mix(in srgb,var(--panel-solid) 97%,transparent);
   backdrop-filter: blur(18px); box-shadow: 0 18px 50px rgba(24,34,64,.14);
@@ -161,20 +161,20 @@ button:disabled { opacity: .48; cursor: not-allowed !important; }
 }
 .search-suggestions.show { display: block; }
 .search-suggestion {
-  width: 100%; display: grid; grid-template-columns: 36px minmax(0,1fr) auto;
-  align-items: center; gap: 10px; border: 0; border-radius: 10px;
-  padding: 8px 10px; background: transparent; color: var(--text); cursor: pointer;
+  width: 100%; display: grid; grid-template-columns: 32px minmax(0,1fr) auto;
+  align-items: center; gap: 8px; border: 0; border-radius: 9px;
+  padding: 6px 9px; background: transparent; color: var(--text); cursor: pointer;
   text-align: left;
 }
 .search-suggestion:hover, .search-suggestion.active { background: color-mix(in srgb,var(--brand) 9%,transparent); }
 .suggestion-icon {
-  width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center;
+  width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center;
   background: color-mix(in srgb,var(--brand) 9%,var(--bg)); color: var(--brand);
-  font-size: 14px; font-weight: 750; overflow: hidden;
+  font-size: 13px; font-weight: 750; overflow: hidden;
 }
-.suggestion-icon img { width: 27px; height: 27px; object-fit: contain; }
+.suggestion-icon img { width: 24px; height: 24px; object-fit: contain; }
 .suggestion-main { min-width: 0; }
-.suggestion-title { font-size: 13.5px; font-weight: 650; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.suggestion-title { font-size: 13.5px; font-weight: 650; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .suggestion-meta { margin-top: 2px; color: var(--muted); font-size: 11.5px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .suggestion-kind { color: var(--muted); font-size: 11px; white-space: nowrap; }
 .shortcut { margin-top: 8px; color: var(--muted); font-size: 12px; }
@@ -953,7 +953,7 @@ window.NAV_CONFIG = {
         seen.add(key);
         return true;
       })
-      .slice(0, 7)
+      .slice(0, 10)
       .forEach(value => items.push({
         type: 'suggest',
         query: value,
@@ -979,7 +979,7 @@ window.NAV_CONFIG = {
     }
 
     items.push({ type: 'search', query: q, provider: els.provider.value });
-    return items.slice(0, 11);
+    return items.slice(0, 15);
   }
 
   let searchSuggestTimer = null;
@@ -1132,7 +1132,6 @@ window.NAV_CONFIG = {
       } else if (item.type === 'suggest') {
         icon.textContent = '⌕';
         title.textContent = item.query;
-        meta.textContent = `${searchProviderName(item.provider)} 搜索联想`;
         kind.textContent = '联想';
       } else if (item.type === 'url') {
         icon.textContent = '↗';
@@ -1147,11 +1146,11 @@ window.NAV_CONFIG = {
       } else {
         icon.textContent = '⌕';
         title.textContent = `搜索“${item.query}”`;
-        meta.textContent = `使用 ${searchProviderName(item.provider)} 搜索`;
         kind.textContent = '搜索';
       }
 
-      main.append(title, meta);
+      main.append(title);
+      if (meta.textContent) main.append(meta);
       btn.append(icon, main, kind);
       btn.addEventListener('mousedown', e => e.preventDefault());
       btn.addEventListener('click', () => executeSearchSuggestion(item));
