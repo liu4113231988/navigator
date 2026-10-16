@@ -899,12 +899,37 @@ window.NAV_CONFIG = {
   function normalizeDirectUrl(value) {
     const raw = String(value || '').trim();
     if (!raw || /\s/.test(raw)) return null;
-    const candidate = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+
+    const hasExplicitScheme = /^https?:\/\//i.test(raw);
+    const candidate = hasExplicitScheme ? raw : `https://${raw}`;
+
     try {
       const url = new URL(candidate);
       if (!['http:', 'https:'].includes(url.protocol)) return null;
-      const host = url.hostname;
-      if (!host || (!host.includes('.') && host !== 'localhost')) return null;
+
+      const host = url.hostname.toLowerCase();
+      if (!host) return null;
+
+      // 防止“.xxx”、“xxx.”、“a..b”之类输入被误判为网址。
+      if (host.startsWith('.') || host.endsWith('.') || host.includes('..')) return null;
+
+      const isLocalhost = host === 'localhost';
+      const isIPv4 = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(host)
+        && host.split('.').every(part => Number(part) >= 0 && Number(part) <= 255);
+      const isIPv6 = host.includes(':');
+
+      const isValidDomain = host.includes('.')
+        && host.split('.').every(label =>
+          label.length > 0
+          && label.length <= 63
+          && /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i.test(label)
+        );
+
+      if (!isLocalhost && !isIPv4 && !isIPv6 && !isValidDomain) return null;
+
+      // 没有显式协议时，只把真正像域名/IP 的内容当作直达网址。
+      if (!hasExplicitScheme && !isLocalhost && !isIPv4 && !isIPv6 && !isValidDomain) return null;
+
       return url.toString();
     } catch {
       return null;
