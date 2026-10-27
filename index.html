@@ -927,6 +927,23 @@ window.NAV_CONFIG = {
 
       if (!isLocalhost && !isIPv4 && !isIPv6 && !isValidDomain) return null;
 
+      // 未显式输入 http(s) 时，明确的文件名后缀不要误判成网址。
+      // 例如 aa.dll / test.exe / report.pdf 应进入搜索。
+      if (!hasExplicitScheme && isValidDomain) {
+        const tld = host.split('.').pop();
+        const fileLikeExtensions = new Set([
+          'dll','exe','msi','cmd','sys','ini','cfg','conf','log',
+          'txt','rtf','pdf','doc','docx','xls','xlsx','ppt','pptx','csv',
+          'jpg','jpeg','png','gif','bmp','webp','svg','ico',
+          'mp3','wav','flac','mp4','avi','mkv',
+          'rar','7z','tar','gz',
+          'apk','ipa','deb','rpm',
+          'js','ts','jsx','tsx','css','json','xml','yaml','yml',
+          'java','class','jar','pyc','cs','cpp','c','h','hpp','go','php','sql'
+        ]);
+        if (fileLikeExtensions.has(tld)) return null;
+      }
+
       // 没有显式协议时，只把真正像域名/IP 的内容当作直达网址。
       if (!hasExplicitScheme && !isLocalhost && !isIPv4 && !isIPv6 && !isValidDomain) return null;
 
